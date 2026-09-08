@@ -57,10 +57,4 @@ class StripeClient:
             p = self._purchase_from_session(session)
             if p:
                 return p
-        # Fallback: succeeded charges carrying this billing email.
-        q = f"billing_details.email:'{email}' AND status:'succeeded'"
-        data = await self._get("/charges/search", {"query": q, "limit": 5})
-        for charge in data.get("data") or []:
-            if not charge.get("refunded"):
-                return Purchase(email=email, ref=charge["id"])
         return None

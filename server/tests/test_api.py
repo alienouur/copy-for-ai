@@ -85,17 +85,10 @@ async def test_recover_by_email(client, monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_recover_charge_fallback_and_invalid(client, monkeypatch):
-    routes = {
-        "/v1/checkout/sessions": {"data": []},
-        "/v1/charges/search": {"data": [{"id": "ch_1", "refunded": False}]},
-    }
-    monkeypatch.setattr(main, "_stripe", make_stripe(routes))
-    r = await client.post("/v1/license/recover", json={"email": "x@y.io"})
-    assert r.status_code == 200
+async def test_recover_invalid_and_missing(client, monkeypatch):
+    monkeypatch.setattr(main, "_stripe", make_stripe({"/v1/checkout/sessions": {"data": []}}))
     r = await client.post("/v1/license/recover", json={"email": "not-an-email"})
     assert r.status_code == 400
-    monkeypatch.setattr(main, "_stripe", make_stripe({"/v1/checkout/sessions": {"data": []}, "/v1/charges/search": {"data": []}}))
     r = await client.post("/v1/license/recover", json={"email": "x@y.io"})
     assert r.status_code == 404
 

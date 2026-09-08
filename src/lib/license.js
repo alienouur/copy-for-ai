@@ -50,16 +50,25 @@ export async function activate(key) {
   return { ok: true, license };
 }
 
-async function api(path, body) {
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// The license server may be asleep on first contact; keep retrying for ~1 min.
+async function api(path, body, attempts = 20) {
   let res;
-  try {
-    res = await fetch(`${LICENSE_API_URL}${path}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-  } catch {
-    return { error: "Could not reach the license server. Check your connection and try again." };
+  for (let i = 0; ; i++) {
+    try {
+      res = await fetch(`${LICENSE_API_URL}${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      break;
+    } catch {
+      if (i >= attempts - 1) {
+        return { error: "Could not reach the license server. Check your connection and try again." };
+      }
+      await sleep(3000);
+    }
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) return { error: data.detail || `HTTP ${res.status}` };

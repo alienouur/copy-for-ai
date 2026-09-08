@@ -62,12 +62,14 @@
     const $ = (id) => document.getElementById(id);
     const show = (id) => { for (const s of ["loading", "success", "recover"]) $(s).hidden = s !== id; };
 
+    const UNREACHABLE = "Could not reach the license server. Please retry in a minute.";
+
     async function post(path, body) {
       let res;
       try {
         res = await fetch(API + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       } catch {
-        return { error: "Could not reach the license server. Please retry in a minute." };
+        return { error: UNREACHABLE, unreachable: true };
       }
       const data = await res.json().catch(() => ({}));
       return res.ok ? data : { error: data.detail || ("HTTP " + res.status) };
@@ -90,7 +92,11 @@
       const msg = $("recover-msg");
       if (!email) { msg.textContent = "Enter your email first"; msg.className = "msg err"; return; }
       msg.textContent = "Looking up your purchase…"; msg.className = "msg";
-      const data = await post("/v1/license/recover", { email });
+      let data = await post("/v1/license/recover", { email });
+      for (let i = 0; i < 20 && data.unreachable; i++) {
+        await new Promise((r) => setTimeout(r, 3000));
+        data = await post("/v1/license/recover", { email });
+      }
       if (data.error) { msg.textContent = data.error; msg.className = "msg err"; return; }
       showKey(data);
     });
@@ -98,17 +104,17 @@
     (async () => {
       const sessionId = new URLSearchParams(location.search).get("session_id");
       if (!sessionId) return show("recover");
-      // Stripe can take a moment to mark the session paid; retry briefly.
-      for (let attempt = 0; attempt < 5; attempt++) {
-        const data = await post("/v1/license/from-session", { session_id: sessionId });
+      // Stripe can take a moment to mark the session paid, and the license
+      // server may be waking from sleep; keep retrying for a while.
+      let data;
+      for (let attempt = 0; attempt < 25; attempt++) {
+        data = await post("/v1/license/from-session", { session_id: sessionId });
         if (!data.error) return showKey(data);
-        if (attempt < 4) await new Promise((r) => setTimeout(r, 2000));
-        else {
-          show("recover");
-          $("recover-msg").textContent = data.error + " You can look the key up by email below.";
-          $("recover-msg").className = "msg err";
-        }
+        await new Promise((r) => setTimeout(r, 3000));
       }
+      show("recover");
+      $("recover-msg").textContent = data.error + " You can look the key up by email below.";
+      $("recover-msg").className = "msg err";
     })();
   </script>
 </body>

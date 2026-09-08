@@ -2,7 +2,8 @@
 name = "copy-for-ai-license"
 version = "1.0.0"
 description = "Issues signed Copy for AI Pro license keys after verifying a Stripe purchase"
-requires-python = ">=3.10"
+readme = "README.md"
+requires-python = ">=3.10,<4.0"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
@@ -15,5 +16,12 @@ dependencies = [
 [project.optional-dependencies]
 test = ["pytest>=8", "pytest-asyncio>=0.23"]
 
+[tool.poetry]
+packages = [{ include = "app" }]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[build-system]
+requires = ["poetry-core>=2.0"]
+build-backend = "poetry.core.masonry.api"

@@ -52,6 +52,7 @@ class EmailBody(BaseModel):
     email: str
 
 
+@app.get("/")
 @app.get("/healthz")
 async def healthz():
     return {"ok": True, "configured": bool(_signing_key and _stripe)}
