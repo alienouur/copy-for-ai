@@ -94,14 +94,28 @@ if (!/2 tabs copied/.test(tabsStatus) || !/Free trial: 4/.test(tabsStatus)) thro
 const bundle = await popup.evaluate(() => navigator.clipboard.readText());
 if (!bundle.includes("\n---\n") || !bundle.includes("Example Domain")) throw new Error("bundle content wrong");
 
-// 4) options page renders, license rejects garbage key
+// 4) options page renders, license rejects garbage/tampered keys and accepts a signed one
 const options = await ctx.newPage();
 await options.goto(`chrome-extension://${extId}/options.html#license`);
-await options.fill("#license-key", "not-a-real-key");
-await options.click("#license-activate");
-await options.waitForSelector("#license-msg.err, #license-msg.ok", { timeout: 20000 });
-console.log("license msg:", await options.textContent("#license-msg"));
+async function tryKey(key) {
+  await options.fill("#license-key", key);
+  await options.click("#license-activate");
+  await options.waitForSelector("#license-msg.err, #license-msg.ok", { timeout: 20000, state: "attached" });
+  const cls = await options.getAttribute("#license-msg", "class");
+  console.log("license msg:", await options.textContent("#license-msg"));
+  return cls.includes("ok");
+}
+if (await tryKey("not-a-real-key")) throw new Error("garbage key accepted");
 await options.screenshot({ path: "release/screenshot-options.png", fullPage: true });
+if (process.env.TEST_LICENSE_KEY) {
+  const real = process.env.TEST_LICENSE_KEY.trim();
+  const tampered = real.replace(/\.([^.]+)$/, (m, sig) => "." + (sig[0] === "A" ? "B" : "A") + sig.slice(1));
+  if (await tryKey(tampered)) throw new Error("tampered key accepted");
+  if (!(await tryKey(real))) throw new Error("signed key rejected");
+  if (!(await options.isVisible("#license-active"))) throw new Error("pro card not shown");
+  await options.reload();
+  if ((await options.textContent("#plan")) !== "Plan: Pro") throw new Error("pro not persisted");
+}
 
 writeFileSync("release/sample-output.md", clip);
 console.log("OK");

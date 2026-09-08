@@ -2,20 +2,16 @@
 
 كل شيء تقني جاهز. المطلوب منك فقط إنشاء الحسابات التي تستلم المال وتنشر الإضافة، لأنها يجب أن تكون باسمك.
 
-## 1) حساب Lemon Squeezy (استلام المدفوعات) – 10 دقائق
-1. سجّل في https://app.lemonsqueezy.com/register
-2. أنشئ متجراً (Store). الاسم المقترح: `Copy for AI`، الرابط الفرعي: `copyforai`
-3. Products → New product:
-   - الاسم: **Copy for AI Pro**
-   - السعر: **$9** – One-time payment
-   - في تبويب **License keys**: فعّل "Generate license keys" وضع Activation limit = **3**
-   - احفظ، ثم من Share انسخ **Checkout link**
-4. Settings → Payouts: أضف وسيلة الاستلام (PayPal أو حساب بنكي).
-5. أرسل لي:
-   - رابط الـ Checkout (شكله: `https://copyforai.lemonsqueezy.com/buy/xxxxxxxx`)
-   - رقم الـ Store ID (Settings → Stores)
+## 1) Stripe (استلام المدفوعات) – تم ✅
+- حساب Stripe مع **Managed Payments** (Stripe يتكفّل بالضرائب والاحتيال ودعم العملاء).
+- منتج **Copy for AI Pro** بسعر 9$ دفعة واحدة، ورابط الدفع: `https://buy.stripe.com/cNieVf5Me70wcA4fdS2Ji00`
+- المتبقي عليك:
+  1. إكمال "Activate payments" (الحساب البنكي) حتى يصبح رابط الدفع **Active** بدل Paused.
+  2. Developers → API keys → **Create restricted key** باسم `copy-for-ai-license` وصلاحيات: Checkout Sessions = Read، Charges = Read. أرسلها لي عبر نافذة الأسرار (ليس في المحادثة).
+  3. بعد نشر الموقع: افتح رابط الدفع في Stripe → تبويب **After payment** → "Don't show confirmation page" → Redirect إلى: `https://<رابط-الموقع>/thanks.html?session_id={CHECKOUT_SESSION_ID}`
 
-سأضعهما في `src/lib/config.js` وأبني الإصدار النهائي.
+### كيف يعمل الترخيص
+بعد الدفع يُحوَّل العميل إلى صفحة `thanks.html`، التي تسأل خادم الترخيص (`server/`) عن جلسة الدفع؛ الخادم يتحقق من Stripe أن الدفع تم ويصدر مفتاحاً موقّعاً (`CFA1.…`). الإضافة تتحقق من توقيع المفتاح محلياً بدون إنترنت. من فقد مفتاحه يستعيده ببريده من نفس الصفحة أو من داخل الإضافة.
 
 ## 2) حساب مطوّر Chrome Web Store – 10 دقائق
 1. اذهب إلى https://chrome.google.com/webstore/devconsole وسجّل بحساب Google
@@ -31,7 +27,7 @@
 ## 4) بعد النشر (تلقائي / أنا أتابعه)
 - تحديثات الإضافة وإصلاح الأخطاء والرد على المراجعات
 - إضافة ميزات Pro جديدة كل فترة لرفع نسبة التحويل
-- تقارير: عدد التحميلات (من لوحة المتجر) والمبيعات (من Lemon Squeezy)
+- تقارير: عدد التحميلات (من لوحة المتجر) والمبيعات (من Stripe)
 
 ## التوقعات
 - المتجر يعرض الإضافات الجديدة عضوياً عند البحث عن "markdown chatgpt"، "copy page for AI" وما شابه.

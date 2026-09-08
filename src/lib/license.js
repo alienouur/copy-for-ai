@@ -1,17 +1,34 @@
-import { FREE_PRO_TRIALS, LICENSE_RECHECK_MS, LS_STORE_ID } from "./config.js";
+import { FREE_PRO_TRIALS, LICENSE_API_URL, LICENSE_PUBLIC_KEY_JWK } from "./config.js";
 import { getSettings, saveSettings } from "./settings.js";
 
-const API = "https://api.lemonsqueezy.com/v1/licenses";
+const PREFIX = "CFA1";
+const ALGO = { name: "ECDSA", namedCurve: "P-256" };
 
-async function call(endpoint, params) {
-  const res = await fetch(`${API}/${endpoint}`, {
-    method: "POST",
-    headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams(params),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok && !data.error) data.error = `HTTP ${res.status}`;
-  return data;
+function b64uDecode(s) {
+  const bin = atob(s.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (s.length % 4)) % 4));
+  return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+}
+
+let publicKeyPromise;
+function publicKey() {
+  publicKeyPromise ||= crypto.subtle.importKey("jwk", LICENSE_PUBLIC_KEY_JWK, ALGO, false, ["verify"]);
+  return publicKeyPromise;
+}
+
+/** Verifies a signed key offline. Returns the payload {e: email, r: ref, t: issuedAt} or null. */
+export async function verifyKey(key) {
+  const parts = String(key || "").trim().split(".");
+  if (parts.length !== 3 || parts[0] !== PREFIX) return null;
+  try {
+    const body = b64uDecode(parts[1]);
+    const sig = b64uDecode(parts[2]);
+    const ok = await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, await publicKey(), sig, body);
+    if (!ok) return null;
+    const payload = JSON.parse(new TextDecoder().decode(body));
+    return typeof payload.e === "string" && typeof payload.r === "string" ? payload : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function getLicense() {
@@ -21,48 +38,49 @@ export async function getLicense() {
 
 export async function isPro() {
   const license = await getLicense();
-  if (!license || license.status !== "active") return false;
-  if (Date.now() - (license.checkedAt || 0) > LICENSE_RECHECK_MS) {
-    revalidate(license).catch(() => {});
-  }
-  return true;
+  return !!license && license.status === "active";
 }
 
 export async function activate(key) {
-  const instanceName = `chrome-${navigator.platform || "browser"}-${Math.random().toString(36).slice(2, 8)}`;
-  const data = await call("activate", { license_key: key.trim(), instance_name: instanceName });
-  if (!data.activated) {
-    return { ok: false, error: data.error || "Invalid license key" };
-  }
-  if (LS_STORE_ID && String(data.meta?.store_id) !== LS_STORE_ID) {
-    await call("deactivate", { license_key: key.trim(), instance_id: data.instance.id });
-    return { ok: false, error: "This key belongs to a different product" };
-  }
-  const license = {
-    key: key.trim(),
-    instanceId: data.instance.id,
-    status: data.license_key.status,
-    expiresAt: data.license_key.expires_at,
-    email: data.meta?.customer_email || "",
-    checkedAt: Date.now(),
-  };
+  const trimmed = String(key || "").trim();
+  const payload = await verifyKey(trimmed);
+  if (!payload) return { ok: false, error: "Invalid license key. Paste the full key starting with CFA1." };
+  const license = { key: trimmed, status: "active", email: payload.e, issuedAt: payload.t * 1000, checkedAt: Date.now() };
   await chrome.storage.sync.set({ license });
   return { ok: true, license };
 }
 
-export async function revalidate(license) {
-  const data = await call("validate", { license_key: license.key, instance_id: license.instanceId });
-  const status = data.valid ? "active" : (data.license_key?.status || "inactive");
-  const next = { ...license, status, checkedAt: Date.now() };
-  await chrome.storage.sync.set({ license: next });
-  return next;
+async function api(path, body) {
+  let res;
+  try {
+    res = await fetch(`${LICENSE_API_URL}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    return { error: "Could not reach the license server. Check your connection and try again." };
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { error: data.detail || `HTTP ${res.status}` };
+  return data;
+}
+
+/** Fetches the key for a finished Stripe Checkout session and activates it. */
+export async function activateFromSession(sessionId) {
+  const data = await api("/v1/license/from-session", { session_id: sessionId });
+  if (data.error) return { ok: false, error: data.error };
+  return activate(data.license_key);
+}
+
+/** Looks up the purchase by receipt email, then activates the returned key. */
+export async function recover(email) {
+  const data = await api("/v1/license/recover", { email });
+  if (data.error) return { ok: false, error: data.error };
+  return activate(data.license_key);
 }
 
 export async function deactivate() {
-  const license = await getLicense();
-  if (license) {
-    await call("deactivate", { license_key: license.key, instance_id: license.instanceId }).catch(() => {});
-  }
   await chrome.storage.sync.remove("license");
 }
 

@@ -1,0 +1,19 @@
+[project]
+name = "copy-for-ai-license"
+version = "1.0.0"
+description = "Issues signed Copy for AI Pro license keys after verifying a Stripe purchase"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "httpx>=0.27",
+    "cryptography>=43",
+    "python-dotenv>=1.0",
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8", "pytest-asyncio>=0.23"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

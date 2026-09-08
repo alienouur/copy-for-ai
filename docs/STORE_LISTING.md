@@ -38,7 +38,7 @@ PRO (one-time payment, lifetime)
 ★ All future Pro features
 
 PRIVACY
-Everything runs locally in your browser. No account, no analytics, no servers. Pages never leave your machine. The only network call is validating a Pro license key if you buy one.
+Everything runs locally in your browser. No account, no analytics, no servers. Pages never leave your machine. The only network call is looking up your Pro license key by email if you buy one and lose it; pasted keys are verified offline.
 
 Works with: ChatGPT, Claude, Gemini, Perplexity, Copilot, Poe, Mistral, local LLMs – anything that accepts text.
 

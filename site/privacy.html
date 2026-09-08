@@ -27,7 +27,7 @@
       </ul>
 
       <h2>What is sent over the network</h2>
-      <p>The only network request the extension makes is to <strong>Lemon Squeezy</strong> (api.lemonsqueezy.com) to activate and periodically re-validate a Pro license key, if you purchase one. The request contains the license key and a generated device name. No page content is ever sent.</p>
+      <p>The only network request the extension can make is to our license server, and only when you use the “Recover license” option: it sends the email address you type in so we can look up your Stripe purchase and return your license key. Pasting a key is verified entirely offline. No page content is ever sent anywhere.</p>
 
       <h2>What we do not do</h2>
       <ul>
@@ -37,13 +37,13 @@
       </ul>
 
       <h2>Payments</h2>
-      <p>Pro purchases are processed by Lemon Squeezy, our merchant of record. Their handling of your payment details is governed by the <a href="https://www.lemonsqueezy.com/privacy">Lemon Squeezy privacy policy</a>.</p>
+      <p>Pro purchases are processed by <strong>Stripe</strong> (Managed Payments); we never see your card details. Stripe's handling of your payment data is governed by the <a href="https://stripe.com/privacy">Stripe privacy policy</a>. After payment, our license server reads your checkout session from Stripe (email address and payment status) to issue your key.</p>
 
       <h2>Changes</h2>
       <p>If this policy changes, the new version will be published at this address with an updated date.</p>
 
       <h2>Contact</h2>
-      <p><a href="mailto:support@copyforai.app">support@copyforai.app</a></p>
+      <p><a href="mailto:alienouur@gmail.com">alienouur@gmail.com</a></p>
     </article>
   </div>
   <script>document.getElementById("date").textContent = new Date().toISOString().slice(0, 10);</script>

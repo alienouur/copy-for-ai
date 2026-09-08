@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Your Copy for AI Pro license</title>
+  <meta name="robots" content="noindex" />
+  <link rel="icon" href="icon512.png" />
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .key { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; word-break: break-all; padding: 12px; border: 1px solid #d8dee9; border-radius: 8px; background: #f6f8fb; margin: 12px 0; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .row input { flex: 1; min-width: 220px; padding: 10px 12px; border: 1px solid #c9d1de; border-radius: 8px; font-size: 15px; }
+    .msg { margin-top: 10px; font-size: 14px; }
+    .msg.err { color: #b42318; }
+    .msg.ok { color: #067647; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <a class="brand" href="index.html"><img src="icon512.png" width="32" height="32" alt="" /> Copy for AI</a>
+    </header>
+    <article class="prose">
+      <section id="loading">
+        <h1>Finishing up…</h1>
+        <p>Confirming your payment and generating your license key.</p>
+      </section>
+
+      <section id="success" hidden>
+        <h1>Thank you! Here is your Pro license 🎉</h1>
+        <p>Copy this key and keep it somewhere safe. If you ever lose it, come back to this page and look it up with <strong id="email"></strong>, the email you used at checkout.</p>
+        <div class="key" id="key"></div>
+        <p class="row">
+          <button class="cta" style="margin-left:0" id="copy">Copy key</button>
+          <span class="sub" id="copied"></span>
+        </p>
+        <h2>Activate in 10 seconds</h2>
+        <ol>
+          <li>Click the Copy for AI icon in Chrome → the gear icon (Settings) → <strong>License</strong> tab.</li>
+          <li>Paste the key and click <strong>Activate</strong>.</li>
+        </ol>
+        <p>Don't have the extension yet? <a id="install" href="https://chromewebstore.google.com/">Add it from the Chrome Web Store</a>, then come back to this page (bookmark it).</p>
+      </section>
+
+      <section id="recover" hidden>
+        <h1>Find your license key</h1>
+        <p>Enter the email address you used at checkout and we'll look up your purchase.</p>
+        <div class="row">
+          <input id="recover-email" type="email" placeholder="you@example.com" autocomplete="email" />
+          <button class="cta" style="margin-left:0" id="recover-btn">Find my key</button>
+        </div>
+        <div class="msg" id="recover-msg"></div>
+        <p class="sub">Still stuck? Email <a href="mailto:alienouur@gmail.com">alienouur@gmail.com</a> with your receipt.</p>
+      </section>
+    </article>
+  </div>
+
+  <script>
+    const API = "__LICENSE_API_URL__";
+    const $ = (id) => document.getElementById(id);
+    const show = (id) => { for (const s of ["loading", "success", "recover"]) $(s).hidden = s !== id; };
+
+    async function post(path, body) {
+      let res;
+      try {
+        res = await fetch(API + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      } catch {
+        return { error: "Could not reach the license server. Please retry in a minute." };
+      }
+      const data = await res.json().catch(() => ({}));
+      return res.ok ? data : { error: data.detail || ("HTTP " + res.status) };
+    }
+
+    function showKey(data) {
+      $("key").textContent = data.license_key;
+      $("email").textContent = data.email || "your checkout email";
+      show("success");
+    }
+
+    $("copy").addEventListener("click", async () => {
+      await navigator.clipboard.writeText($("key").textContent);
+      $("copied").textContent = "Copied!";
+      setTimeout(() => ($("copied").textContent = ""), 2000);
+    });
+
+    $("recover-btn").addEventListener("click", async () => {
+      const email = $("recover-email").value.trim();
+      const msg = $("recover-msg");
+      if (!email) { msg.textContent = "Enter your email first"; msg.className = "msg err"; return; }
+      msg.textContent = "Looking up your purchase…"; msg.className = "msg";
+      const data = await post("/v1/license/recover", { email });
+      if (data.error) { msg.textContent = data.error; msg.className = "msg err"; return; }
+      showKey(data);
+    });
+
+    (async () => {
+      const sessionId = new URLSearchParams(location.search).get("session_id");
+      if (!sessionId) return show("recover");
+      // Stripe can take a moment to mark the session paid; retry briefly.
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const data = await post("/v1/license/from-session", { session_id: sessionId });
+        if (!data.error) return showKey(data);
+        if (attempt < 4) await new Promise((r) => setTimeout(r, 2000));
+        else {
+          show("recover");
+          $("recover-msg").textContent = data.error + " You can look the key up by email below.";
+          $("recover-msg").className = "msg err";
+        }
+      }
+    })();
+  </script>
+</body>
+</html>

@@ -1,15 +1,20 @@
-// Lemon Squeezy checkout link for Copy for AI Pro. Replace with the real
-// product URL once the store is created (Products → Share → Checkout link).
-export const PRO_CHECKOUT_URL = "https://copyforai.lemonsqueezy.com/checkout";
+// Stripe Payment Link for Copy for AI Pro (one-time $9).
+export const PRO_CHECKOUT_URL = "https://buy.stripe.com/cNieVf5Me70wcA4fdS2Ji00";
 
-// Optional: restrict license activation to this Lemon Squeezy store id.
-// Leave empty to accept any valid key.
-export const LS_STORE_ID = "";
+// License server (server/): verifies the Stripe purchase and returns a signed key.
+export const LICENSE_API_URL = "__LICENSE_API_URL__";
 
-export const LANDING_URL = "https://copyforai.devinapps.com";
-export const SUPPORT_EMAIL = "support@copyforai.app";
+// Public half of the license signing key; keys are verified offline with WebCrypto.
+export const LICENSE_PUBLIC_KEY_JWK = {
+  kty: "EC",
+  crv: "P-256",
+  x: "NJGNnf7K-q_oz64eFV1BsWJFymN9lbkOjlgmQFwJBVw",
+  y: "wqk-buuqkvFuLzGewKXmaNrcf_D396170oeatKx6PPg",
+};
+
+export const LANDING_URL = "__LANDING_URL__";
+export const SUPPORT_EMAIL = "alienouur@gmail.com";
 
 export const FREE_PRO_TRIALS = 5;
 export const MAX_HISTORY = 30;
 export const HISTORY_ITEM_CHAR_LIMIT = 150_000;
-export const LICENSE_RECHECK_MS = 7 * 24 * 60 * 60 * 1000;

@@ -1,5 +1,5 @@
 import { BUILTIN_TEMPLATES, getSettings, saveSettings } from "./lib/settings.js";
-import { activate, deactivate, getLicense, isPro } from "./lib/license.js";
+import { activate, deactivate, getLicense, isPro, recover } from "./lib/license.js";
 import { clearHistory, getHistory, removeHistory } from "./lib/history.js";
 import { formatCount } from "./lib/format.js";
 import { PRO_CHECKOUT_URL } from "./lib/config.js";
@@ -51,6 +51,7 @@ async function init() {
   $("tpl-cancel").addEventListener("click", resetEditor);
   $("license-activate").addEventListener("click", onActivate);
   $("license-deactivate").addEventListener("click", onDeactivate);
+  $("license-recover").addEventListener("click", onRecover);
   $("history-clear").addEventListener("click", async () => {
     await clearHistory();
     renderHistory();
@@ -149,26 +150,35 @@ async function renderLicense() {
   $("license-free").hidden = active;
   $("license-active").hidden = !active;
   if (active) {
-    const parts = [`Key: …${license.key.slice(-8)}`];
+    const parts = ["Lifetime license"];
     if (license.email) parts.push(license.email);
-    if (license.expiresAt) parts.push(`Renews/expires: ${license.expiresAt.slice(0, 10)}`);
     $("license-info").textContent = parts.join(" · ");
   }
 }
 
-async function onActivate() {
-  const key = $("license-key").value.trim();
-  if (!key) return setMsg("license-msg", "Paste your license key first", "err");
-  $("license-activate").disabled = true;
-  setMsg("license-msg", "Checking…", "");
-  const result = await activate(key).catch((e) => ({ ok: false, error: e.message }));
-  $("license-activate").disabled = false;
-  if (!result.ok) return setMsg("license-msg", result.error, "err");
+async function finishActivation(buttonId, msgId, promise) {
+  $(buttonId).disabled = true;
+  setMsg(msgId, "Checking…", "");
+  const result = await promise.catch((e) => ({ ok: false, error: e.message }));
+  $(buttonId).disabled = false;
+  if (!result.ok) return setMsg(msgId, result.error, "err");
   pro = true;
-  setMsg("license-msg", "Pro activated!", "ok");
+  setMsg(msgId, "Pro activated!", "ok");
   renderPlan();
   renderLicense();
   renderHistory();
+}
+
+function onActivate() {
+  const key = $("license-key").value.trim();
+  if (!key) return setMsg("license-msg", "Paste your license key first", "err");
+  return finishActivation("license-activate", "license-msg", activate(key));
+}
+
+function onRecover() {
+  const email = $("license-email").value.trim();
+  if (!email) return setMsg("recover-msg", "Enter the email you used at checkout", "err");
+  return finishActivation("license-recover", "recover-msg", recover(email));
 }
 
 async function onDeactivate() {
