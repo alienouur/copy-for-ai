@@ -29,8 +29,11 @@ if (!sw) sw = await ctx.waitForEvent("serviceworker");
 const extId = new URL(sw.url()).host;
 console.log("extension id", extId);
 
-// Close the welcome tab opened on install (it points at an unreachable URL in tests).
-for (const p of ctx.pages()) if (p.url().includes("welcome")) await p.close().catch(() => {});
+// Close the welcome tab opened on install so it doesn't count in the all-tabs bundle.
+const welcome =
+  ctx.pages().find((p) => p.url().includes("welcome")) ||
+  (await ctx.waitForEvent("page", { timeout: 5000 }).catch(() => null));
+if (welcome) await welcome.close().catch(() => {});
 
 const article = await ctx.newPage();
 await article.goto("https://en.wikipedia.org/wiki/Markdown", { waitUntil: "domcontentloaded" });

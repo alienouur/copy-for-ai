@@ -2,7 +2,7 @@
 export const PRO_CHECKOUT_URL = "https://buy.stripe.com/cNieVf5Me70wcA4fdS2Ji00";
 
 // License server (server/): verifies the Stripe purchase and returns a signed key.
-export const LICENSE_API_URL = "__LICENSE_API_URL__";
+export const LICENSE_API_URL = "https://copyforai-license.onrender.com";
 
 // Public half of the license signing key; keys are verified offline with WebCrypto.
 export const LICENSE_PUBLIC_KEY_JWK = {
@@ -12,7 +12,7 @@ export const LICENSE_PUBLIC_KEY_JWK = {
   y: "wqk-buuqkvFuLzGewKXmaNrcf_D396170oeatKx6PPg",
 };
 
-export const LANDING_URL = "__LANDING_URL__";
+export const LANDING_URL = "https://copyforai.onrender.com";
 export const SUPPORT_EMAIL = "alienouur@gmail.com";
 
 export const FREE_PRO_TRIALS = 5;

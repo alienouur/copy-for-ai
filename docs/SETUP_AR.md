@@ -5,10 +5,12 @@
 ## 1) Stripe (استلام المدفوعات) – تم ✅
 - حساب Stripe مع **Managed Payments** (Stripe يتكفّل بالضرائب والاحتيال ودعم العملاء).
 - منتج **Copy for AI Pro** بسعر 9$ دفعة واحدة، ورابط الدفع: `https://buy.stripe.com/cNieVf5Me70wcA4fdS2Ji00`
+- خادم الترخيص منشور على Render: `https://copyforai-license.onrender.com` (المستودع `alienouur/copy-for-ai`، مجلد `server/`، يُعاد نشره تلقائياً عند كل push إلى main).
+- الموقع منشور على Render: `https://copyforai.onrender.com` (مجلد `site/`).
 - المتبقي عليك:
   1. إكمال "Activate payments" (الحساب البنكي) حتى يصبح رابط الدفع **Active** بدل Paused.
-  2. Developers → API keys → **Create restricted key** باسم `copy-for-ai-license` وصلاحيات: Checkout Sessions = Read، Charges = Read. أرسلها لي عبر نافذة الأسرار (ليس في المحادثة).
-  3. بعد نشر الموقع: افتح رابط الدفع في Stripe → تبويب **After payment** → "Don't show confirmation page" → Redirect إلى: `https://<رابط-الموقع>/thanks.html?session_id={CHECKOUT_SESSION_ID}`
+  2. افتح رابط الدفع في Stripe → **Edit** → تبويب **After payment** → "Don't show confirmation page" → Redirect إلى: `https://copyforai.onrender.com/thanks.html?session_id={CHECKOUT_SESSION_ID}`
+  3. تدوير مفتاح Stripe المقيّد (Developers → API keys → ⋯ → Roll key) لأنه لُصق في المحادثة، ثم تحديث `STRIPE_RESTRICTED_KEY` في Render → copyforai-license → Environment.
 
 ### كيف يعمل الترخيص
 بعد الدفع يُحوَّل العميل إلى صفحة `thanks.html`، التي تسأل خادم الترخيص (`server/`) عن جلسة الدفع؛ الخادم يتحقق من Stripe أن الدفع تم ويصدر مفتاحاً موقّعاً (`CFA1.…`). الإضافة تتحقق من توقيع المفتاح محلياً بدون إنترنت. من فقد مفتاحه يستعيده ببريده من نفس الصفحة أو من داخل الإضافة.
@@ -22,7 +24,7 @@
 6. Submit for review – المراجعة عادة 1–3 أيام
 
 ## 3) اختياري: نطاق للموقع
-الموقع سينشر على رابط `*.devinapps.com` مجاناً. لو أردت نطاقاً خاصاً (مثل copyforai.app بحوالي 10–15$/سنة) أخبرني وسأربطه.
+الموقع منشور على `https://copyforai.onrender.com` مجاناً. لو أردت نطاقاً خاصاً (مثل copyforai.app بحوالي 10–15$/سنة) أخبرني وسأربطه.
 
 ## 4) بعد النشر (تلقائي / أنا أتابعه)
 - تحديثات الإضافة وإصلاح الأخطاء والرد على المراجعات

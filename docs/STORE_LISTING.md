@@ -57,7 +57,7 @@ Converts the content of the current web page (or selected text / open tabs) into
 
 ## Data usage disclosure (Privacy practices tab)
 - Does not collect any user data. Tick: "I do not sell or transfer user data…", "I do not use or transfer user data for purposes unrelated…", "I do not use or transfer user data to determine creditworthiness…".
-- Privacy policy URL: https://<landing-domain>/privacy.html
+- Privacy policy URL: https://copyforai.onrender.com/privacy.html
 
 ## Screenshots needed (1280×800 or 640×400)
 1. Popup over an article with "Page copied · 3.2k words · ~10k tokens"
