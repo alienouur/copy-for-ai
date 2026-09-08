@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Copy for AI – Copy any web page as clean Markdown for ChatGPT & Claude</title>
+  <meta name="description" content="Chrome extension that copies any web page, selection or all your open tabs as clean Markdown ready to paste into ChatGPT, Claude or Gemini. Token counter, prompt templates, one click." />
+  <meta property="og:title" content="Copy for AI – Page to Markdown for ChatGPT & Claude" />
+  <meta property="og:description" content="One click turns any web page into clean, token-efficient Markdown for your AI chat." />
+  <meta property="og:image" content="screenshot-popup.png" />
+  <link rel="icon" href="icon512.png" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <a class="brand" href="/"><img src="icon512.png" width="32" height="32" alt="" /> Copy for AI</a>
+      <nav>
+        <a href="#features">Features</a>
+        <a href="#pricing">Pricing</a>
+        <a href="#faq">FAQ</a>
+        <a href="privacy.html">Privacy</a>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <h1>Paste web pages into ChatGPT<br />without the mess</h1>
+      <p>Copy for AI turns any page, selection or all your open tabs into clean Markdown – no menus, no ads, no cookie banners. Just the content your AI needs, with a token count so you never blow the context window.</p>
+      <a class="cta" id="install" href="https://chromewebstore.google.com/" rel="noopener">Add to Chrome – it's free</a>
+      <a class="cta secondary" href="#pricing">See Pro</a>
+      <span class="sub">Works with ChatGPT, Claude, Gemini, Perplexity, Copilot and any chat that accepts text.</span>
+      <img class="shot" src="screenshot-popup.png" width="640" alt="Copy for AI popup showing a page copied with word and token counts" />
+    </section>
+
+    <section id="features" class="grid">
+      <div class="card"><h3>Clean Markdown, not raw HTML</h3><p>Readability-grade extraction removes navigation, ads, footers and footnote clutter. Headings, lists, tables and code blocks survive intact.</p></div>
+      <div class="card"><h3>Token counter built in</h3><p>See words and estimated tokens before you paste, with warnings when a page won't fit GPT-4o or Claude's context.</p></div>
+      <div class="card"><h3>Prompt templates</h3><p>Wrap the content in “Summarize”, “Explain simply”, “Key points” or your own template. Paste once, done.</p></div>
+      <div class="card"><h3>Selection or whole page</h3><p>Select a paragraph or grab the entire article. Right-click menu and <kbd>Alt+Shift+C</kbd> shortcut included.</p></div>
+      <div class="card"><h3>All tabs at once <em>(Pro)</em></h3><p>Researching across 12 tabs? Bundle them into one structured document with a source line for every page.</p></div>
+      <div class="card"><h3>Private by design</h3><p>Everything runs in your browser. No account, no servers, no tracking. Your pages never leave your machine.</p></div>
+    </section>
+
+    <h2 id="pricing">Simple pricing</h2>
+    <div class="pricing">
+      <div class="price">
+        <div>Free</div>
+        <div class="amount">$0</div>
+        <ul>
+          <li>Copy page or selection as Markdown</li>
+          <li>5 built-in prompt templates</li>
+          <li>Token & word counter</li>
+          <li>Keyboard shortcut & right-click menu</li>
+        </ul>
+        <a class="cta secondary" style="margin-left:0" href="https://chromewebstore.google.com/">Add to Chrome</a>
+      </div>
+      <div class="price pro">
+        <div>Pro</div>
+        <div class="amount">$9 <small>one-time · lifetime</small></div>
+        <ul>
+          <li>Everything in Free</li>
+          <li>Bundle all open tabs into one document</li>
+          <li>Unlimited custom prompt templates</li>
+          <li>Copy history (last 30 items)</li>
+          <li>All future Pro features</li>
+        </ul>
+        <a class="cta" id="buy" href="https://copyforai.lemonsqueezy.com/checkout">Get Pro</a>
+      </div>
+    </div>
+
+    <h2 id="faq">FAQ</h2>
+    <div class="faq">
+      <details><summary>Does it work with Claude and Gemini?</summary><p>Yes. The output is plain Markdown text, so it works anywhere you can paste text.</p></details>
+      <details><summary>Does the extension send my pages anywhere?</summary><p>No. Extraction and formatting happen entirely inside your browser. The only network request is validating a Pro license key with Lemon Squeezy, if you buy one.</p></details>
+      <details><summary>How accurate is the token count?</summary><p>It is an estimate (about 4 characters per token for English) – within roughly 10–15% of what OpenAI and Anthropic tokenizers report.</p></details>
+      <details><summary>Can I use Pro on multiple computers?</summary><p>Yes, a Pro key can be activated on up to 3 browsers.</p></details>
+      <details><summary>Refunds?</summary><p>If Pro doesn't work for you, email us within 14 days for a full refund.</p></details>
+    </div>
+
+    <footer>
+      <span>© <span id="year"></span> Copy for AI</span>
+      <span><a href="privacy.html">Privacy policy</a> · <a href="mailto:support@copyforai.app">Support</a></span>
+    </footer>
+  </div>
+  <script>document.getElementById("year").textContent = new Date().getFullYear();</script>
+</body>
+</html>

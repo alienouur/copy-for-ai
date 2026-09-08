@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Privacy Policy – Copy for AI</title>
+  <link rel="icon" href="icon512.png" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <a class="brand" href="index.html"><img src="icon512.png" width="32" height="32" alt="" /> Copy for AI</a>
+    </header>
+    <article class="prose">
+      <h1>Privacy Policy</h1>
+      <p>Last updated: <span id="date"></span></p>
+
+      <h2>Summary</h2>
+      <p>Copy for AI runs entirely inside your browser. It does not collect, store or transmit the content of the pages you copy, your browsing history, or any personal data.</p>
+
+      <h2>What the extension accesses</h2>
+      <ul>
+        <li><strong>The active tab, when you ask it to.</strong> When you click the extension, use the keyboard shortcut or the right-click menu, the extension reads the current page (or your selection) to convert it to Markdown. This happens locally and the result is placed on your clipboard.</li>
+        <li><strong>All open tabs (optional, Pro).</strong> The “All tabs” feature asks for permission to read your other tabs only when you first use it. The content is combined locally and copied to your clipboard.</li>
+        <li><strong>Settings.</strong> Your preferences and prompt templates are stored with Chrome's sync storage so they follow your Chrome profile. Pro copy history is stored only on the local device.</li>
+      </ul>
+
+      <h2>What is sent over the network</h2>
+      <p>The only network request the extension makes is to <strong>Lemon Squeezy</strong> (api.lemonsqueezy.com) to activate and periodically re-validate a Pro license key, if you purchase one. The request contains the license key and a generated device name. No page content is ever sent.</p>
+
+      <h2>What we do not do</h2>
+      <ul>
+        <li>No analytics, tracking pixels or advertising SDKs.</li>
+        <li>No accounts, no email collection by the extension.</li>
+        <li>No selling or sharing of data with third parties.</li>
+      </ul>
+
+      <h2>Payments</h2>
+      <p>Pro purchases are processed by Lemon Squeezy, our merchant of record. Their handling of your payment details is governed by the <a href="https://www.lemonsqueezy.com/privacy">Lemon Squeezy privacy policy</a>.</p>
+
+      <h2>Changes</h2>
+      <p>If this policy changes, the new version will be published at this address with an updated date.</p>
+
+      <h2>Contact</h2>
+      <p><a href="mailto:support@copyforai.app">support@copyforai.app</a></p>
+    </article>
+  </div>
+  <script>document.getElementById("date").textContent = new Date().toISOString().slice(0, 10);</script>
+</body>
+</html>

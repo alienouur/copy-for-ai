@@ -1,0 +1,25 @@
+{
+  "name": "copy-for-ai",
+  "version": "1.0.0",
+  "description": "Chrome extension: copy any page as clean Markdown for ChatGPT/Claude",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "icons": "python3 scripts/icons.py"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@mozilla/readability": "^0.6.0",
+    "turndown": "^7.2.4",
+    "turndown-plugin-gfm": "^1.0.2"
+  },
+  "devDependencies": {
+    "archiver": "^8.0.0",
+    "esbuild": "^0.28.2",
+    "playwright": "^1.63.0"
+  },
+  "private": true
+}
