@@ -13,26 +13,48 @@
       <a id="pro-badge" class="badge" href="#" title="Upgrade to Pro">Upgrade</a>
     </header>
 
-    <label class="field">
-      <span>Prompt template</span>
-      <select id="template"></select>
-    </label>
+    <section id="solve">
+      <textarea id="question" rows="2" placeholder="Optional: ask something specific about this page… (e.g. “only question 3”)"></textarea>
 
-    <div class="toggles">
-      <label><input type="checkbox" id="includeLinks" /> Links</label>
-      <label><input type="checkbox" id="includeImages" /> Images</label>
-      <label><input type="checkbox" id="includeHeader" /> Title & URL</label>
-    </div>
+      <div class="toggles">
+        <label title="Show just the final answers, no explanation"><input type="checkbox" id="answerOnly" /> Answer only</label>
+        <label title="Also send a screenshot of the visible page so images, diagrams and PDFs are understood"><input type="checkbox" id="sendScreenshot" /> Screenshot</label>
+      </div>
 
-    <button id="copy-page" class="primary">Copy this page</button>
-    <div class="row">
-      <button id="copy-selection">Copy selection</button>
-      <button id="copy-tabs" title="Bundle every tab in this window into one document">
-        All tabs <span class="pro-tag">PRO</span>
-      </button>
-    </div>
+      <button id="solve-btn" class="primary">Solve this page</button>
+      <p class="hint-line">Select text first to solve only that part. <span id="quota"></span></p>
 
-    <div id="status" class="status" hidden></div>
+      <div id="status" class="status" hidden></div>
+
+      <div id="answer-box" hidden>
+        <div id="answer" class="answer"></div>
+        <div class="row">
+          <button id="copy-answer">Copy answer</button>
+          <button id="explain-btn">Explain</button>
+        </div>
+        <p class="hint-line" id="answer-meta"></p>
+      </div>
+    </section>
+
+    <details id="copy-tools">
+      <summary>Copy as Markdown for ChatGPT / Claude</summary>
+      <label class="field">
+        <span>Prompt template</span>
+        <select id="template"></select>
+      </label>
+      <div class="toggles">
+        <label><input type="checkbox" id="includeLinks" /> Links</label>
+        <label><input type="checkbox" id="includeImages" /> Images</label>
+        <label><input type="checkbox" id="includeHeader" /> Title & URL</label>
+      </div>
+      <div class="row">
+        <button id="copy-page">Copy page</button>
+        <button id="copy-selection">Copy selection</button>
+        <button id="copy-tabs" title="Bundle every tab in this window into one document">
+          All tabs <span class="pro-tag">PRO</span>
+        </button>
+      </div>
+    </details>
 
     <footer>
       <a href="#" id="open-options">Settings</a>

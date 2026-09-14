@@ -108,3 +108,104 @@ async def test_public_key_and_health(client):
     r = await client.get("/v1/public-key")
     assert r.json()["crv"] == "P-256"
     assert (await client.get("/healthz")).json()["configured"] is True
+
+
+# ---------------------------------------------------------------- solve / plans
+
+
+def make_gemini(answer: str = "B) 42", status: int = 200, calls: list | None = None):
+    from app.gemini import GeminiClient
+
+    def handler(req: httpx.Request):
+        if calls is not None:
+            calls.append(req)
+        if status != 200:
+            return httpx.Response(status, json={"error": {"message": "boom"}})
+        return httpx.Response(200, json={"candidates": [{"content": {"parts": [{"text": "thinking", "thought": True}, {"text": answer}]}}]})
+
+    g = GeminiClient("k")
+    g.http = httpx.AsyncClient(base_url="https://generativelanguage.googleapis.com/v1beta", transport=httpx.MockTransport(handler))
+    return g
+
+
+SUB_SESSION = {**PAID, "id": "cs_test_sub", "subscription": "sub_1"}
+DEVICE = {"device_id": "device-12345678"}
+
+
+@pytest.fixture
+def solve_env(monkeypatch):
+    monkeypatch.setattr(main, "_daily", {})
+    monkeypatch.setattr(main, "_plan_cache", {})
+    monkeypatch.setattr(main, "FREE_DAILY_LIMIT", 2)
+    monkeypatch.setattr(main, "_gemini", make_gemini())
+
+
+@pytest.mark.anyio
+async def test_solve_free_quota_and_answer(client, solve_env, monkeypatch):
+    calls = []
+    monkeypatch.setattr(main, "_gemini", make_gemini(calls=calls))
+    r = await client.post("/v1/solve", json={**DEVICE, "text": "What is 6*7? A) 40 B) 42", "mode": "answer"})
+    assert r.status_code == 200
+    assert r.json() == {"answer": "B) 42", "plan": "free", "remaining": 1, "model": main.GEMINI_MODEL}
+    sent = calls[0].read().decode()
+    assert "PAGE TEXT" in sent and "OUTPUT ONLY THE FINAL ANSWERS" in sent
+
+    r = await client.post("/v1/solve", json={**DEVICE, "image": "aGVsbG8=", "mode": "explain"})
+    assert r.status_code == 200 and r.json()["remaining"] == 0
+    assert "inline_data" in calls[1].read().decode()
+
+    r = await client.post("/v1/solve", json={**DEVICE, "text": "again"})
+    assert r.status_code == 402
+    assert len(calls) == 2  # quota exhausted -> no Gemini call
+
+    r = await client.post("/v1/me", json=DEVICE)
+    assert r.json() == {"plan": "free", "remaining": 0, "limit": 2, "expired": False}
+
+
+@pytest.mark.anyio
+async def test_solve_validation(client, solve_env):
+    r = await client.post("/v1/solve", json={**DEVICE})
+    assert r.status_code == 400
+    r = await client.post("/v1/solve", json={**DEVICE, "text": "x", "mode": "essay"})
+    assert r.status_code == 400
+    r = await client.post("/v1/solve", json={"device_id": "short", "text": "x"})
+    assert r.status_code == 400
+    r = await client.post("/v1/solve", json={**DEVICE, "image": "a" * (main.MAX_IMAGE_B64_CHARS + 1)})
+    assert r.status_code == 413
+
+
+@pytest.mark.anyio
+async def test_solve_gemini_down(client, solve_env, monkeypatch):
+    monkeypatch.setattr(main, "_gemini", make_gemini(status=503))
+    r = await client.post("/v1/solve", json={**DEVICE, "text": "q"})
+    assert r.status_code == 503
+    assert (await client.post("/v1/me", json=DEVICE)).json()["remaining"] == 2  # failure not charged
+
+
+@pytest.mark.anyio
+async def test_solve_pro_subscription(client, solve_env, monkeypatch):
+    key = signing.issue_key(main._signing_key, "buyer@example.com", "cs_test_sub")
+    active = {"/v1/checkout/sessions": {"data": [SUB_SESSION]}, "/v1/subscriptions/sub_1": {"status": "active"}}
+    monkeypatch.setattr(main, "_stripe", make_stripe(active))
+    body = {**DEVICE, "license_key": key, "text": "q"}
+    for _ in range(3):  # exceeds the free limit of 2
+        r = await client.post("/v1/solve", json=body)
+        assert r.status_code == 200 and r.json()["plan"] == "pro"
+    me = (await client.post("/v1/me", json={**DEVICE, "license_key": key})).json()
+    assert me["plan"] == "pro" and me["remaining"] == main.PRO_DAILY_LIMIT - 3
+
+    # Canceled subscription -> back to free, flagged as expired
+    main._plan_cache.clear()
+    canceled = {**active, "/v1/subscriptions/sub_1": {"status": "canceled"}}
+    monkeypatch.setattr(main, "_stripe", make_stripe(canceled))
+    me = (await client.post("/v1/me", json={**DEVICE, "license_key": key})).json()
+    assert me["plan"] == "free" and me["expired"] is True
+
+    # Lifetime (one-time) purchase still counts as pro
+    main._plan_cache.clear()
+    monkeypatch.setattr(main, "_stripe", make_stripe({"/v1/checkout/sessions": {"data": [PAID]}}))
+    assert (await client.post("/v1/me", json={**DEVICE, "license_key": key})).json()["plan"] == "pro"
+
+    # Tampered key -> free
+    r = await client.post("/v1/me", json={**DEVICE, "license_key": key[:-3] + "AAA"})
+    assert r.json()["plan"] == "free" and r.json()["expired"] is False

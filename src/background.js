@@ -1,11 +1,13 @@
 import { copyTabs } from "./lib/copy.js";
 import { LANDING_URL } from "./lib/config.js";
 
+const MENU_SOLVE = "cfa-solve";
 const MENU_PAGE = "cfa-copy-page";
 const MENU_SELECTION = "cfa-copy-selection";
 
 chrome.runtime.onInstalled.addListener(({ reason }) => {
   chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({ id: MENU_SOLVE, title: "Solve with Copy for AI", contexts: ["page", "selection"] });
     chrome.contextMenus.create({ id: MENU_PAGE, title: "Copy page for AI (Markdown)", contexts: ["page"] });
     chrome.contextMenus.create({ id: MENU_SELECTION, title: "Copy selection for AI (Markdown)", contexts: ["selection"] });
   });
@@ -16,8 +18,20 @@ chrome.runtime.onInstalled.addListener(({ reason }) => {
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (!tab) return;
+  if (info.menuItemId === MENU_SOLVE) {
+    openSolver(tab);
+    return;
+  }
   run(tab, info.menuItemId === MENU_SELECTION ? "selection" : "page");
 });
+
+async function openSolver(tab) {
+  try {
+    await chrome.action.openPopup({ windowId: tab.windowId });
+  } catch {
+    notify("Copy for AI", "Click the Copy for AI icon in the toolbar, then “Solve this page”.");
+  }
+}
 
 chrome.commands.onCommand.addListener(async (command, tab) => {
   if (command !== "copy-page") return;

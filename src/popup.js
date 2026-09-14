@@ -4,9 +4,13 @@ import { allTemplates, getSettings, saveSettings } from "./lib/settings.js";
 import { checkProAccess, isPro } from "./lib/license.js";
 import { contextWarning, formatCount } from "./lib/format.js";
 import { PRO_CHECKOUT_URL } from "./lib/config.js";
+import { fetchPlan, solveTab } from "./lib/solver.js";
+import { renderMarkdown } from "./lib/markdown.js";
 
 const $ = (id) => document.getElementById(id);
 const status = $("status");
+let lastAnswer = "";
+let solving = false;
 
 async function init() {
   const settings = await getSettings();
@@ -31,11 +35,22 @@ async function init() {
   select.value = settings.templateId;
   select.addEventListener("change", () => saveSettings({ templateId: select.value }));
 
-  for (const key of ["includeLinks", "includeImages", "includeHeader"]) {
+  for (const key of ["includeLinks", "includeImages", "includeHeader", "answerOnly", "sendScreenshot"]) {
     const box = $(key);
     box.checked = settings[key];
     box.addEventListener("change", () => saveSettings({ [key]: box.checked }));
   }
+
+  $("solve-btn").addEventListener("click", () => solve($("answerOnly").checked ? "answer" : "explain"));
+  $("explain-btn").addEventListener("click", () => solve("explain"));
+  $("copy-answer").addEventListener("click", copyAnswer);
+  $("question").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      $("solve-btn").click();
+    }
+  });
+  refreshQuota(pro);
 
   $("copy-page").addEventListener("click", () => copyCurrent("page"));
   $("copy-selection").addEventListener("click", () => copyCurrent("selection"));
@@ -68,6 +83,85 @@ function showStatus(html, kind) {
   status.innerHTML = html;
 }
 
+function hideStatus() {
+  status.hidden = true;
+}
+
+const upgradeLink = (label = "Upgrade to Pro") => `<a href="${PRO_CHECKOUT_URL}" target="_blank">${label}</a>`;
+
+// --- Solve
+
+async function refreshQuota(pro) {
+  const el = $("quota");
+  try {
+    const me = await fetchPlan();
+    if (me.plan === "pro") {
+      el.textContent = "Pro · unlimited answers";
+    } else {
+      const expired = me.expired ? "Subscription ended. " : "";
+      el.innerHTML = `${expired}${me.remaining} free answer${me.remaining === 1 ? "" : "s"} left today · ${upgradeLink("Go unlimited")}`;
+    }
+  } catch {
+    el.textContent = pro ? "Pro" : "";
+  }
+}
+
+async function solve(mode) {
+  if (solving) return;
+  solving = true;
+  setBusy(true);
+  $("answer-box").hidden = true;
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const result = await solveTab({
+      tab,
+      mode,
+      question: $("question").value,
+      screenshot: $("sendScreenshot").checked,
+      onProgress: (msg) => showStatus(msg, "busy"),
+    });
+    hideStatus();
+    renderAnswer(result, mode);
+  } catch (err) {
+    if (err.status === 402) {
+      showStatus(`${err.message} ${upgradeLink("Upgrade – $4.99/month")}`, "err");
+    } else {
+      showStatus(err.message, "err");
+    }
+  } finally {
+    solving = false;
+    setBusy(false);
+    refreshQuota(await isPro());
+  }
+}
+
+function renderAnswer(result, mode) {
+  lastAnswer = result.answer;
+  const box = $("answer");
+  box.innerHTML = renderMarkdown(result.answer);
+  const isSingleLine = mode === "answer" && !result.answer.includes("\n") && result.answer.length <= 80;
+  box.classList.toggle("single", isSingleLine);
+  $("explain-btn").hidden = mode === "explain";
+
+  const sources = [];
+  if (result.usedSelection) sources.push("selected text");
+  else if (result.hadText) sources.push("page text");
+  if (result.usedScreenshot) sources.push("screenshot");
+  const remaining = result.plan === "pro" ? "" : ` · ${result.remaining} free left today`;
+  $("answer-meta").textContent = `Based on ${sources.join(" + ") || "your question"}${remaining}. Double-check before submitting.`;
+  $("answer-box").hidden = false;
+}
+
+async function copyAnswer() {
+  if (!lastAnswer) return;
+  await writeClipboard(lastAnswer);
+  const btn = $("copy-answer");
+  btn.textContent = "Copied!";
+  setTimeout(() => (btn.textContent = "Copy answer"), 1500);
+}
+
+// --- Copy as Markdown
+
 function successMessage(stats, extra = "") {
   const warn = contextWarning(stats.tokens);
   const what = stats.tabs > 1 ? `${stats.tabs} tabs` : stats.usedSelection ? "Selection" : "Page";
@@ -95,7 +189,7 @@ async function copyCurrent(mode) {
 async function copyAllTabs() {
   const access = await checkProAccess(false);
   if (!access.allowed) {
-    showStatus(`Bundling all tabs is a Pro feature. <a href="${PRO_CHECKOUT_URL}" target="_blank">Upgrade – one-time payment</a>`, "err");
+    showStatus(`Bundling all tabs is a Pro feature. ${upgradeLink("Upgrade – $4.99/month")}`, "err");
     return;
   }
   if (!(await ensureAllTabsPermission())) {

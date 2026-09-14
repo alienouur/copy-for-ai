@@ -39,6 +39,8 @@ export const DEFAULT_SETTINGS = {
   templateId: "plain",
   customTemplates: [],
   proTrialsUsed: 0,
+  answerOnly: true,
+  sendScreenshot: true,
 };
 
 export async function getSettings() {

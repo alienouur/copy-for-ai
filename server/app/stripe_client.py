@@ -2,6 +2,8 @@ import httpx
 
 API = "https://api.stripe.com/v1"
 PAID_STATUSES = {"paid", "no_payment_required"}
+# past_due keeps access during Stripe's dunning/retry window.
+ACTIVE_SUBSCRIPTION_STATUSES = {"active", "trialing", "past_due"}
 
 
 class StripeError(Exception):
@@ -48,13 +50,32 @@ class StripeClient:
         session = await self._get(f"/checkout/sessions/{session_id}", {"expand[]": "line_items"})
         return self._purchase_from_session(session)
 
-    async def purchase_from_email(self, email: str) -> Purchase | None:
+    async def _sessions_for_email(self, email: str) -> list[dict]:
         data = await self._get(
             "/checkout/sessions",
             {"customer_details[email]": email, "limit": 20, "expand[]": "data.line_items"},
         )
-        for session in data.get("data") or []:
+        return data.get("data") or []
+
+    async def purchase_from_email(self, email: str) -> Purchase | None:
+        for session in await self._sessions_for_email(email):
             p = self._purchase_from_session(session)
             if p:
                 return p
         return None
+
+    async def has_active_plan(self, email: str) -> bool:
+        """True if the email owns a lifetime (one-time) purchase or a live subscription."""
+        subscription_ids: list[str] = []
+        for session in await self._sessions_for_email(email):
+            if not self._purchase_from_session(session):
+                continue
+            sub = session.get("subscription")
+            if not sub:
+                return True  # mode=payment: lifetime license
+            subscription_ids.append(sub if isinstance(sub, str) else sub.get("id", ""))
+        for sub_id in subscription_ids:
+            sub = await self._get(f"/subscriptions/{sub_id}")
+            if sub.get("status") in ACTIVE_SUBSCRIPTION_STATUSES:
+                return True
+        return False
