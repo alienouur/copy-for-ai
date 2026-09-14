@@ -17,7 +17,7 @@
 1. https://aistudio.google.com/apikey → **Create API key** → اربطه بمشروع Google Cloud وفعّل **Billing** عليه (بدون فوترة الحد المجاني منخفض جداً وسيتوقف الحل عند الازدحام).
 2. Render → copyforai-license → **Environment** → أضف `GEMINI_API_KEY` = المفتاح → Save (يُعاد نشر الخادم تلقائياً).
 3. اختياري: في Google Cloud → APIs & Services → Credentials → المفتاح → **API restrictions** → Generative Language API فقط. وضع تنبيه ميزانية (Billing → Budgets) عند 20$/شهر مثلاً.
-4. التكلفة التقريبية مع gemini-2.5-flash: 0.1–0.3 سنت للسؤال النصي، و≈0.5 سنت مع لقطة شاشة. مشترك Pro يستخدم 100 سؤال/شهر يكلّف ≈0.3–0.5$ مقابل 4.99$. المجاني محدود بـ 5 أسئلة/يوم لكل جهاز و150/يوم لكل IP.
+4. التكلفة التقريبية مع gemini-3.6-flash: 0.1–0.3 سنت للسؤال النصي، و≈0.5 سنت مع لقطة شاشة. مشترك Pro يستخدم 100 سؤال/شهر يكلّف ≈0.3–0.5$ مقابل 4.99$. المجاني محدود بـ 5 أسئلة/يوم لكل جهاز و150/يوم لكل IP.
 5. تحقّق: `https://copyforai-license.onrender.com/healthz` يجب أن يُظهر `"solver":true`.
 
 ### كيف يعمل الترخيص

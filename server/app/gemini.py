@@ -31,7 +31,7 @@ class GeminiError(Exception):
 
 
 class GeminiClient:
-    def __init__(self, api_key: str, model: str = "gemini-2.5-flash", thinking_budget: int = 1024):
+    def __init__(self, api_key: str, model: str = "gemini-3.6-flash", thinking_budget: int = 1024):
         self.model = model
         self.thinking_budget = thinking_budget
         self.http = httpx.AsyncClient(base_url=API, headers={"x-goog-api-key": api_key}, timeout=75)

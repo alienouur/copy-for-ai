@@ -20,7 +20,7 @@ PRIVATE_KEY_PEM = os.environ.get("LICENSE_PRIVATE_KEY", "").replace("\\n", "\n")
 PRICE_ID = os.environ.get("STRIPE_PRICE_ID", "")
 RATE_LIMIT = int(os.environ.get("RATE_LIMIT_PER_HOUR", "30"))
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
 FREE_DAILY_LIMIT = int(os.environ.get("FREE_DAILY_LIMIT", "5"))
 # Per-IP cap for free usage; high enough that a shared school/campus NAT is not blocked.
 FREE_IP_DAILY_LIMIT = int(os.environ.get("FREE_IP_DAILY_LIMIT", "150"))
