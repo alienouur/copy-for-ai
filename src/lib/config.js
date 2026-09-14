@@ -1,5 +1,5 @@
 // Stripe Payment Link for Copy for AI Pro ($4.99/month subscription).
-export const PRO_CHECKOUT_URL = "https://buy.stripe.com/cNieVf5Me70wcA4fdS2Ji00";
+export const PRO_CHECKOUT_URL = "https://buy.stripe.com/6oUdRb3E6bgM9nS5Di2Ji01";
 
 // License server (server/): verifies the Stripe purchase and returns a signed key.
 export const LICENSE_API_URL = "https://copyforai-license.onrender.com";
