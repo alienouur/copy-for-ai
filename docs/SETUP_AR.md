@@ -4,14 +4,12 @@
 
 ## 1) Stripe (استلام المدفوعات) – تم ✅
 - حساب Stripe مع **Managed Payments** (Stripe يتكفّل بالضرائب والاحتيال ودعم العملاء).
-- منتج **Copy for AI Pro**. رابط الدفع الحالي: `https://buy.stripe.com/cNieVf5Me70wcA4fdS2Ji00` (أُنشئ كـ 9$ دفعة واحدة — يجب تحويله إلى اشتراك، انظر أدناه).
+- منتج **Copy for AI Pro** بسعر اشتراك **4.99$/شهر**. رابط الدفع: `https://buy.stripe.com/6oUdRb3E6bgM9nS5Di2Ji01` (Active، يحوّل بعد الدفع إلى `thanks.html`). الرابط القديم (9$ دفعة واحدة) يُفضّل تعطيله من Payment links → ⋯ → Deactivate.
 - خادم الترخيص منشور على Render: `https://copyforai-license.onrender.com` (المستودع `alienouur/copy-for-ai`، مجلد `server/`، يُعاد نشره تلقائياً عند كل push إلى main).
 - الموقع منشور على Render: `https://copyforai.onrender.com` (مجلد `site/`).
 - المتبقي عليك:
-  1. إكمال "Activate payments" (الحساب البنكي) حتى يصبح رابط الدفع **Active** بدل Paused.
-  2. افتح رابط الدفع في Stripe → **Edit** → تبويب **After payment** → "Don't show confirmation page" → Redirect إلى: `https://copyforai.onrender.com/thanks.html?session_id={CHECKOUT_SESSION_ID}`
-  3. تدوير مفتاح Stripe المقيّد (Developers → API keys → ⋯ → Roll key) لأنه لُصق في المحادثة، ثم تحديث `STRIPE_RESTRICTED_KEY` في Render → copyforai-license → Environment. عند إعادة إنشائه أضف صلاحية **Subscriptions: Read** (يحتاجها الخادم للتحقق من أن الاشتراك ما زال فعّالاً).
-  4. **تحويل Pro إلى اشتراك 4.99$/شهر:** Product catalog → Copy for AI Pro → Add another price → **Recurring** · Monthly · 4.99 USD → Save. ثم Payment links → New → اختر السعر الشهري → فعّل Managed Payments وAllow promotion codes → After payment: Redirect إلى نفس رابط thanks.html أعلاه → Create. أرسل لي الرابط الجديد `https://buy.stripe.com/...` لأضعه في الإضافة والموقع (يمكن بعدها أرشفة سعر 9$ وتعطيل رابطه القديم).
+  1. تدوير مفتاح Stripe المقيّد (Developers → API keys → ⋯ → Roll key) لأنه لُصق في المحادثة، ثم تحديث `STRIPE_RESTRICTED_KEY` في Render → copyforai-license → Environment. عند إعادة إنشائه أضف صلاحية **Subscriptions: Read** (يحتاجها الخادم للتحقق من أن الاشتراك ما زال فعّالاً).
+  2. في Render → copyforai-license → Environment تأكد أن `STRIPE_PRICE_ID` هو معرّف السعر الشهري (Product catalog → Copy for AI Pro → السعر $4.99/month → `price_...`)، أو احذفه ليقبل الخادم أي سعر للمنتج.
 
 ## 1-ب) Gemini (محرّك الحل) – مطلوب مرة واحدة
 1. https://aistudio.google.com/apikey → **Create API key** → اربطه بمشروع Google Cloud وفعّل **Billing** عليه (بدون فوترة الحد المجاني منخفض جداً وسيتوقف الحل عند الازدحام).
