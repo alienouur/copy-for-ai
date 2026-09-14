@@ -1,3 +1,4 @@
+import json
 import os
 
 import httpx
@@ -113,15 +114,21 @@ async def test_public_key_and_health(client):
 # ---------------------------------------------------------------- solve / plans
 
 
-def make_gemini(answer: str = "B) 42", status: int = 200, calls: list | None = None):
+def make_gemini(answer: str = "B) 42", status: int = 200, calls: list | None = None, chunks: list[str] | None = None):
     from app.gemini import GeminiClient
+
+    def candidate(text: str) -> dict:
+        return {"candidates": [{"content": {"parts": [{"text": "thinking", "thought": True}, {"text": text}]}}]}
 
     def handler(req: httpx.Request):
         if calls is not None:
             calls.append(req)
         if status != 200:
             return httpx.Response(status, json={"error": {"message": "boom"}})
-        return httpx.Response(200, json={"candidates": [{"content": {"parts": [{"text": "thinking", "thought": True}, {"text": answer}]}}]})
+        if req.url.path.endswith(":streamGenerateContent"):
+            body = "".join(f"data: {json.dumps(candidate(c))}\r\n\r\n" for c in (chunks or [answer]))
+            return httpx.Response(200, content=body.encode(), headers={"content-type": "text/event-stream"})
+        return httpx.Response(200, json=candidate(answer))
 
     g = GeminiClient("k")
     g.http = httpx.AsyncClient(base_url="https://generativelanguage.googleapis.com/v1beta", transport=httpx.MockTransport(handler))
@@ -209,3 +216,51 @@ async def test_solve_pro_subscription(client, solve_env, monkeypatch):
     # Tampered key -> free
     r = await client.post("/v1/me", json={**DEVICE, "license_key": key[:-3] + "AAA"})
     assert r.json()["plan"] == "free" and r.json()["expired"] is False
+
+
+def parse_sse(raw: str) -> list[dict]:
+    return [json.loads(line[5:]) for line in raw.splitlines() if line.startswith("data:")]
+
+
+@pytest.mark.anyio
+async def test_solve_stream(client, solve_env, monkeypatch):
+    calls = []
+    monkeypatch.setattr(main, "_gemini", make_gemini(calls=calls, chunks=["B) ", "42"]))
+    r = await client.post("/v1/solve", json={**DEVICE, "text": "6*7?", "mode": "answer", "stream": True})
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/event-stream")
+    events = parse_sse(r.text)
+    assert [e.get("delta") for e in events[:-1]] == ["B) ", "42"]
+    assert events[-1] == {"done": True, "plan": "free", "remaining": 1, "model": main.GEMINI_MODEL}
+    assert calls[0].url.path.endswith(":streamGenerateContent") and calls[0].url.params["alt"] == "sse"
+    assert (await client.post("/v1/me", json=DEVICE)).json()["remaining"] == 1
+
+    # Upstream rejection before the first token is a plain HTTP error and is not charged
+    monkeypatch.setattr(main, "_gemini", make_gemini(status=503))
+    r = await client.post("/v1/solve", json={**DEVICE, "text": "q", "stream": True})
+    assert r.status_code == 503
+    assert (await client.post("/v1/me", json=DEVICE)).json()["remaining"] == 1
+
+
+@pytest.mark.anyio
+async def test_solve_follow_up_history(client, solve_env, monkeypatch):
+    calls = []
+    monkeypatch.setattr(main, "_gemini", make_gemini(answer="Because 6×7=42.", calls=calls))
+    history = [
+        {"role": "user", "text": "Solve the questions on this page."},
+        {"role": "model", "text": "B) 42"},
+    ]
+    r = await client.post(
+        "/v1/solve",
+        json={**DEVICE, "text": "What is 6*7? A) 40 B) 42", "question": "why?", "mode": "explain", "history": history},
+    )
+    assert r.status_code == 200 and r.json()["answer"] == "Because 6×7=42."
+    sent = json.loads(calls[0].read())
+    roles = [c["role"] for c in sent["contents"]]
+    assert roles == ["user", "model", "user"]
+    assert "PAGE TEXT" in sent["contents"][0]["parts"][0]["text"]
+    assert sent["contents"][1]["parts"][0]["text"] == "B) 42"
+    assert sent["contents"][2]["parts"][0]["text"] == "why?"
+    assert "step-by-step" in sent["contents"][2]["parts"][1]["text"]
+
+    r = await client.post("/v1/solve", json={**DEVICE, "text": "q", "history": [{"role": "user", "text": "x" * 9000}]})
+    assert r.status_code == 422

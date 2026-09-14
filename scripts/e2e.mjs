@@ -1,4 +1,4 @@
-// Loads dist/ into a throwaway Chrome profile and exercises extraction, popup and options.
+// Loads dist/ into a throwaway Chrome profile and exercises extraction, the side panel and options.
 import { chromium } from "playwright";
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -60,8 +60,9 @@ if (!/Markdown/.test(doc.title) || doc.markdown.length < 2000 || !/^#+ /m.test(d
   throw new Error("extraction looks wrong");
 }
 
-// 2) popup: patch tabs.query so the popup targets the article tab
+// 2) side panel: patch tabs.query so the panel targets the article tab
 const popup = await ctx.newPage();
+await popup.setViewportSize({ width: 400, height: 720 });
 await popup.addInitScript((tabId) => {
   const orig = chrome.tabs.query.bind(chrome.tabs);
   chrome.tabs.query = async (q) => {
@@ -70,78 +71,114 @@ await popup.addInitScript((tabId) => {
     return tabs.filter((t) => !t.url.startsWith("chrome-extension://"));
   };
 }, articleTabId);
-// Mock the solver API so the test needs neither Gemini nor the live server.
+// Mock the solver API (SSE stream) so the test needs neither Gemini nor the live server.
 const solveCalls = [];
+const sse = (events) => events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join("");
 await popup.route("**/v1/me", (route) =>
   route.fulfill({ json: { plan: "free", remaining: 5 - solveCalls.length, limit: 5, expired: false } }),
 );
 await popup.route("**/v1/solve", (route) => {
   const body = route.request().postDataJSON();
   solveCalls.push(body);
-  if (solveCalls.length === 3) return route.fulfill({ status: 402, json: { detail: "You've used today's free answers." } });
-  const answer = body.mode === "answer" ? "**42**" : "## Steps\n\n1. Read the page\n2. Think\n\nFinal answer: **42**";
-  return route.fulfill({ json: { answer, plan: "free", remaining: 5 - solveCalls.length, model: "mock" } });
+  if (solveCalls.length === 4) return route.fulfill({ status: 402, json: { detail: "You've used today's free answers." } });
+  const deltas = body.mode === "answer" ? ["**4", "2**"] : ["## Steps\n\n1. Read the page\n", "2. Think\n\nFinal answer: **42**"];
+  const events = [...deltas.map((delta) => ({ delta })), { done: true, plan: "free", remaining: 5 - solveCalls.length, model: "mock" }];
+  return route.fulfill({ status: 200, headers: { "content-type": "text/event-stream" }, body: sse(events) });
 });
-await popup.goto(`chrome-extension://${extId}/popup.html`);
-await popup.waitForFunction(() => /free answers? left/.test(document.getElementById("quota").textContent));
+await popup.goto(`chrome-extension://${extId}/sidepanel.html`);
+await popup.waitForFunction(() => /free left/.test(document.getElementById("quota").textContent));
 console.log("quota:", await popup.textContent("#quota"));
+console.log("page title:", await popup.textContent("#page-title"));
+if (!/Markdown/.test(await popup.textContent("#page-title"))) throw new Error("page bar does not show the active tab");
 
-// 2a) Solve: answer-only with text + screenshot
+const lastAnswer = () => popup.locator(".msg.model .bubble").last();
+const settled = () => popup.waitForFunction(() => document.querySelectorAll(".msg.model .bubble.streaming").length === 0 && !document.querySelector("button[disabled]#send-btn"), null, { timeout: 20000 });
+
+// 2a) Solve: answer-only with text + screenshot, streamed
 await popup.check("#answerOnly");
 await popup.check("#sendScreenshot");
 await popup.click("#solve-btn");
-await popup.waitForSelector("#answer-box:not([hidden])", { timeout: 20000 });
+await popup.waitForSelector(".msg.model", { timeout: 20000 });
+await settled();
 let req = solveCalls.at(-1);
-console.log("solve request:", { mode: req.mode, textChars: req.text.length, imageChars: req.image?.length ?? 0, device: req.device_id.length });
-if (req.mode !== "answer" || !req.text.includes("Markdown") || !req.image || req.image.length < 5000) throw new Error("solve request payload wrong");
+console.log("solve request:", { mode: req.mode, stream: req.stream, textChars: req.text.length, imageChars: req.image?.length ?? 0, history: req.history.length });
+if (req.mode !== "answer" || req.stream !== true || req.history.length !== 0 || !req.text.includes("Markdown") || !req.image || req.image.length < 5000) throw new Error("solve request payload wrong");
 if (req.image.startsWith("data:")) throw new Error("image must be raw base64");
-if ((await popup.textContent("#answer")).trim() !== "42" || !(await popup.locator("#answer strong").count())) throw new Error("answer not rendered");
-console.log("answer meta:", await popup.textContent("#answer-meta"));
-if (!/page text \+ screenshot/.test(await popup.textContent("#answer-meta"))) throw new Error("answer meta wrong");
-await popup.click("#copy-answer");
+if ((await lastAnswer().textContent()).trim() !== "42" || !(await lastAnswer().locator("strong").count())) throw new Error("answer not rendered");
+const meta1 = await popup.locator(".msg.model .meta").last().textContent();
+console.log("answer meta:", meta1);
+if (!/page text \+ screenshot/.test(meta1)) throw new Error("answer meta wrong");
+if ((await popup.locator(".msg.user .bubble").first().textContent()) !== "Solve the questions on this page.") throw new Error("user turn missing");
+await popup.locator(".msg.model .copy").last().click();
 if ((await popup.evaluate(() => navigator.clipboard.readText())) !== "**42**") throw new Error("copy answer failed");
-await popup.screenshot({ path: "release/screenshot-solve.png" });
+if (await popup.isHidden("#chips")) throw new Error("follow-up chips should show after an answer");
 
-// 2b) Explain, no screenshot, with a typed question
+// 2b) Follow-up question (Enter) carries the conversation; no screenshot this time
 await popup.uncheck("#sendScreenshot");
-await popup.fill("#question", "only question 3");
-await popup.click("#explain-btn");
-await popup.waitForFunction(() => document.querySelector("#answer h4"), null, { timeout: 20000 });
+await popup.fill("#question", "why?");
+await popup.press("#question", "Enter");
+await popup.waitForFunction(() => document.querySelectorAll(".msg").length === 4, null, { timeout: 20000 });
+await settled();
 req = solveCalls.at(-1);
-if (req.mode !== "explain" || req.image !== null || req.question !== "only question 3") throw new Error("explain request wrong");
-if ((await popup.locator("#answer ol li").count()) !== 2) throw new Error("markdown list not rendered");
-if (!(await popup.isHidden("#explain-btn"))) throw new Error("explain button should hide in explain mode");
+console.log("follow-up request:", { mode: req.mode, question: req.question, history: req.history.map((t) => `${t.role}:${t.text.slice(0, 12)}`) });
+if (req.mode !== "answer" || req.image !== null || req.question !== "why?" || req.history.length !== 2) throw new Error("follow-up request wrong");
+if (req.history[0].role !== "user" || req.history[1].role !== "model" || req.history[1].text !== "**42**") throw new Error("history content wrong");
+if ((await popup.inputValue("#question")) !== "") throw new Error("composer should clear after sending");
 
-// 2c) Quota exhausted -> upgrade prompt
-await popup.click("#solve-btn");
+// Explain button on an answer -> explain-mode follow-up with Markdown headings/lists
+await popup.locator(".msg.model .explain").last().click();
+await popup.waitForFunction(() => document.querySelector("#messages h4"), null, { timeout: 20000 });
+await settled();
+req = solveCalls.at(-1);
+if (req.mode !== "explain" || req.history.length !== 4 || !/step by step/.test(req.question)) throw new Error("explain request wrong");
+if ((await lastAnswer().locator("ol li").count()) !== 2) throw new Error("markdown list not rendered");
+if (!(await popup.locator(".msg.model .explain").last().isHidden())) throw new Error("explain button should hide on explain answers");
+await popup.screenshot({ path: "release/screenshot-sidepanel.png" });
+
+// Thread survives a panel reload and a page refresh, resets on navigation to another page
+await popup.reload();
+await popup.waitForFunction(() => document.querySelectorAll(".msg").length === 6, null, { timeout: 10000 });
+await article.reload({ waitUntil: "domcontentloaded" });
+await popup.waitForTimeout(1000);
+if ((await popup.locator(".msg").count()) !== 6) throw new Error("thread lost after page refresh");
+console.log("thread persisted across panel reload + page refresh");
+await article.goto("https://en.wikipedia.org/wiki/Markdown?e2e=nav", { waitUntil: "domcontentloaded" });
+await popup.waitForSelector("#empty:not([hidden])", { timeout: 10000 });
+if ((await popup.locator(".msg").count()) !== 0) throw new Error("thread should reset on navigation");
+console.log("thread reset on navigation");
+
+// 2c) Quota exhausted -> upgrade prompt, failed turn is rolled back
+await popup.fill("#question", "q4");
+await popup.click("#send-btn");
 await popup.waitForSelector(".status.err", { timeout: 20000 });
 const quotaMsg = await popup.textContent("#status");
 console.log("quota error:", quotaMsg);
 if (!/free answers/.test(quotaMsg) || !(await popup.locator("#status a[href*='stripe.com']").count())) throw new Error("402 handling wrong");
+if ((await popup.locator(".msg").count()) !== 0 || (await popup.inputValue("#question")) !== "q4") throw new Error("failed turn should be rolled back");
 
 // 2d) Copy tools still work
 await popup.click("#copy-tools summary");
 await popup.selectOption("#template", "summarize");
 await popup.click("#copy-page");
-await popup.waitForSelector(".status.ok", { timeout: 15000 });
-console.log("popup status:", await popup.textContent("#status"));
+await popup.waitForSelector("#copy-status.ok", { timeout: 15000 });
+console.log("copy status:", await popup.textContent("#copy-status"));
 const clip = await popup.evaluate(() => navigator.clipboard.readText());
 console.log("clipboard starts with:", JSON.stringify(clip.slice(0, 120)));
 if (!clip.startsWith("Summarize the following page") || !clip.includes("# Markdown")) throw new Error("clipboard content wrong");
-await popup.screenshot({ path: "release/screenshot-popup.png" });
+await popup.screenshot({ path: "release/screenshot-copytools.png" });
 
 // selection with nothing selected -> friendly error
 await popup.click("#copy-selection");
-await popup.waitForSelector(".status.err", { timeout: 15000 });
-console.log("selection error:", await popup.textContent("#status"));
+await popup.waitForSelector("#copy-status.err", { timeout: 15000 });
+console.log("selection error:", await popup.textContent("#copy-status"));
 
 // 3) all-tabs (free trial path)
 const second = await ctx.newPage();
 await second.goto("https://example.com/", { waitUntil: "domcontentloaded" });
 await popup.bringToFront();
 await popup.click("#copy-tabs");
-await popup.waitForSelector(".status.ok", { timeout: 30000 });
-const tabsStatus = await popup.textContent("#status");
+await popup.waitForSelector("#copy-status.ok", { timeout: 30000 });
+const tabsStatus = await popup.textContent("#copy-status");
 console.log("all tabs status:", tabsStatus);
 if (!/2 tabs copied/.test(tabsStatus) || !/Free trial: 4/.test(tabsStatus)) throw new Error("all-tabs bundling failed");
 const bundle = await popup.evaluate(() => navigator.clipboard.readText());

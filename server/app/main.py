@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import time
@@ -7,7 +8,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 
 from .gemini import GeminiClient, GeminiError
 from .signing import issue_key, load_private_key, public_jwk, verify_key
@@ -117,12 +119,19 @@ class MeBody(BaseModel):
     device_id: str
 
 
+class Turn(BaseModel):
+    role: str  # user | model
+    text: str = Field(max_length=8000)
+
+
 class SolveBody(MeBody):
     text: str = ""
     image: str | None = None  # base64 (no data: prefix)
     image_mime: str = "image/jpeg"
     question: str = ""
     mode: str = "answer"  # answer | explain
+    history: list[Turn] = Field(default_factory=list, max_length=24)  # earlier turns for follow-up questions
+    stream: bool = False  # true -> text/event-stream of {"delta"} events ending with {"done"}
 
 
 async def _resolve_plan(body: MeBody, request: Request) -> dict:
@@ -183,14 +192,46 @@ async def solve(body: SolveBody, request: Request):
             raise HTTPException(429, "Daily fair-use limit reached. It resets at midnight UTC.")
         raise HTTPException(402, "You've used today's free answers. Upgrade to Pro for unlimited answers.")
 
+    history = [t.model_dump() for t in body.history if t.role in ("user", "model")]
+    meta = {"plan": plan["plan"], "remaining": remaining - 1, "model": GEMINI_MODEL}
+
+    if not body.stream:
+        try:
+            answer = await _gemini.solve(text, body.image, body.image_mime, question, body.mode, history)
+        except GeminiError as e:
+            raise HTTPException(e.status, str(e))
+        for k in plan["keys"]:
+            _consume(k)
+        return {"answer": answer, **meta}
+
+    deltas = _gemini.solve_stream(text, body.image, body.image_mime, question, body.mode, history)
+    # Pull the first delta before responding so upstream rejections still surface as plain HTTP errors.
     try:
-        answer = await _gemini.solve(text, body.image, body.image_mime, question, body.mode)
+        first = await anext(deltas)
     except GeminiError as e:
         raise HTTPException(e.status, str(e))
 
-    for k in plan["keys"]:
-        _consume(k)
-    return {"answer": answer, "plan": plan["plan"], "remaining": remaining - 1, "model": GEMINI_MODEL}
+    async def events():
+        yield _sse({"delta": first})
+        try:
+            async for delta in deltas:
+                yield _sse({"delta": delta})
+        except GeminiError as e:
+            yield _sse({"error": str(e)})
+            return
+        for k in plan["keys"]:
+            _consume(k)
+        yield _sse({"done": True, **meta})
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+def _sse(event: dict) -> str:
+    return f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
 
 
 @app.get("/v1/public-key")

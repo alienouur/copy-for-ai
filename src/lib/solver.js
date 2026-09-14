@@ -46,9 +46,32 @@ function blobToDataUrl(blob) {
   });
 }
 
+const ALL_SITES = { origins: ["<all_urls>"] };
+
+/** True when the extension may read the tab without a fresh toolbar click (all-sites grant or activeTab). */
+export async function hasPageAccess(tab) {
+  if (await chrome.permissions.contains(ALL_SITES)) return true;
+  if (!tab.url) return false;
+  try {
+    return await chrome.permissions.contains({ origins: [new URL(tab.url).origin + "/*"] });
+  } catch {
+    return false;
+  }
+}
+
+/** Asks once for access to all sites so the side panel keeps working after reloads and navigation. */
+export async function requestPageAccess() {
+  if (await chrome.permissions.contains(ALL_SITES)) return true;
+  try {
+    return await chrome.permissions.request(ALL_SITES);
+  } catch {
+    return false;
+  }
+}
+
 /** Reads the page (selection first, then article text). Returns {text, usedSelection} or null when unreadable. */
 export async function readTab(tab) {
-  if (!isSupportedUrl(tab.url)) return null;
+  if (tab.url && !isSupportedUrl(tab.url)) return null;
   try {
     const doc = await extractFromTab(tab.id, { mode: "auto", includeLinks: false, includeImages: false });
     const text = (doc.markdown || "").trim();
@@ -62,8 +85,7 @@ export async function readTab(tab) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** POSTs JSON to the API, retrying while the (free-tier) server wakes up. */
-export async function api(path, body, { attempts = 12, onRetry } = {}) {
+async function request(path, body, { attempts = 12, onRetry } = {}) {
   for (let i = 0; ; i++) {
     let res;
     try {
@@ -78,21 +100,74 @@ export async function api(path, body, { attempts = 12, onRetry } = {}) {
       await sleep(3000);
       continue;
     }
-    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
       const err = new Error(data.detail || `Server error (${res.status})`);
       err.status = res.status;
       throw err;
     }
+    return res;
+  }
+}
+
+/** POSTs JSON to the API, retrying while the (free-tier) server wakes up. */
+export async function api(path, body, options = {}) {
+  const res = await request(path, body, options);
+  return res.json().catch(() => ({}));
+}
+
+/**
+ * POSTs with stream:true and feeds answer deltas to onDelta as they arrive.
+ * Resolves with the final metadata ({plan, remaining, model}) and the full answer.
+ * Falls back to a plain JSON response when the server does not stream.
+ */
+export async function apiStream(path, body, { onDelta, ...options } = {}) {
+  const res = await request(path, { ...body, stream: true }, options);
+  if (!res.headers.get("content-type")?.includes("text/event-stream")) {
+    const data = await res.json();
+    onDelta?.(data.answer || "");
     return data;
   }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let answer = "";
+  let meta = null;
+  const handle = (line) => {
+    if (!line.startsWith("data:")) return;
+    let event;
+    try {
+      event = JSON.parse(line.slice(5));
+    } catch {
+      return;
+    }
+    if (event.error) throw new Error(event.error);
+    if (event.delta) {
+      answer += event.delta;
+      onDelta?.(event.delta, answer);
+    }
+    if (event.done) meta = event;
+  };
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop();
+    for (const line of lines) handle(line);
+  }
+  if (buffer) handle(buffer);
+  if (!answer) throw new Error("The answer stream ended without a result. Please try again.");
+  return { ...(meta || {}), answer };
 }
 
 /**
  * Reads the active tab (text + optional screenshot) and asks the server for the solution.
  * mode: "answer" (final answers only) | "explain".
+ * history: earlier [{role, text}] turns when this is a follow-up question about the same page.
+ * onDelta(delta, answerSoFar) streams the answer as it is generated.
  */
-export async function solveTab({ tab, mode, question = "", screenshot = true, onProgress }) {
+export async function solveTab({ tab, mode, question = "", screenshot = true, history = [], onProgress, onDelta }) {
   onProgress?.("Reading page…");
   const page = await readTab(tab);
   let image = null;
@@ -100,13 +175,18 @@ export async function solveTab({ tab, mode, question = "", screenshot = true, on
     onProgress?.("Capturing screenshot…");
     image = await captureTab(tab);
   }
-  if (!page && !image && !question.trim()) {
-    throw new Error("This page can't be read or captured. Open the question in a normal tab and try again.");
+  if (!page && !image) {
+    if (!(await hasPageAccess(tab))) {
+      throw new Error("Copy for AI can't see this page yet. Click its toolbar icon once, or allow access to all sites, then try again.");
+    }
+    if (!question.trim()) {
+      throw new Error("This page can't be read or captured. Open the question in a normal tab and try again.");
+    }
   }
 
   const license = await getLicense();
   onProgress?.("Solving…");
-  const data = await api("/v1/solve", {
+  const data = await apiStream("/v1/solve", {
     device_id: await getDeviceId(),
     license_key: license?.key || null,
     text: page?.text || "",
@@ -114,7 +194,8 @@ export async function solveTab({ tab, mode, question = "", screenshot = true, on
     image_mime: "image/jpeg",
     question: question.trim(),
     mode,
-  }, { onRetry: () => onProgress?.("Waking up the server…") });
+    history,
+  }, { onDelta, onRetry: () => onProgress?.("Waking up the server…") });
 
   return { ...data, usedSelection: !!page?.usedSelection, usedScreenshot: !!image, hadText: !!page };
 }
