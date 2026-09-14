@@ -20,6 +20,12 @@
     <main>
       <section id="tab-general" class="tab active">
         <h1>General</h1>
+        <h2>Solver</h2>
+        <label class="check"><input type="checkbox" id="answerOnly" /> Answer only by default (no explanation)</label>
+        <label class="check"><input type="checkbox" id="sendScreenshot" /> Send a screenshot of the visible page along with its text (needed for images, diagrams and PDFs)</label>
+        <p class="muted">When you click <em>Solve</em>, the page text and screenshot are sent to the Copy for AI server and processed by Google Gemini to produce the answer. Nothing is sent until you click.</p>
+
+        <h2>Copy as Markdown</h2>
         <label class="check"><input type="checkbox" id="includeHeader" /> Add title and source URL at the top</label>
         <label class="check"><input type="checkbox" id="includeLinks" /> Keep links</label>
         <label class="check"><input type="checkbox" id="includeImages" /> Keep images</label>
@@ -29,7 +35,7 @@
         <p>Current shortcut: <kbd id="shortcut">Alt+Shift+C</kbd>. Change it at <a href="#" id="shortcuts-link">chrome://extensions/shortcuts</a>.</p>
 
         <h2>Right-click menu</h2>
-        <p>Right-click any page or selected text and choose <em>Copy page for AI</em> / <em>Copy selection for AI</em>.</p>
+        <p>Right-click any page or selected text and choose <em>Solve with Copy for AI</em>, <em>Copy page for AI</em> or <em>Copy selection for AI</em>.</p>
       </section>
 
       <section id="tab-templates" class="tab">
@@ -64,12 +70,13 @@
         <div id="license-free" class="card">
           <h2>Copy for AI Pro</h2>
           <ul>
+            <li><strong>Unlimited answers</strong> (free plan: 5 per day)</li>
             <li>Bundle all open tabs into one document</li>
             <li>Unlimited custom prompt templates</li>
             <li>Copy history (last 30 items)</li>
             <li>Priority support &amp; all future Pro features</li>
           </ul>
-          <a class="button primary" id="license-buy" target="_blank">Get Pro – $9 one-time</a>
+          <a class="button primary" id="license-buy" target="_blank">Get Pro – $4.99/month, cancel anytime</a>
           <p class="muted">After checkout you land on a page showing your license key. Paste it here:</p>
           <div class="row">
             <input id="license-key" placeholder="CFA1.xxxxx.xxxxx" spellcheck="false" />
@@ -85,7 +92,7 @@
         </div>
         <div id="license-active" class="card" hidden>
           <h2>Pro is active</h2>
-          <p>Thank you for supporting Copy for AI.</p>
+          <p>Thank you for supporting Copy for AI. Unlimited answers are enabled while your subscription is active.</p>
           <p class="muted" id="license-info"></p>
           <button id="license-deactivate">Remove license from this browser</button>
         </div>

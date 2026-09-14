@@ -23,7 +23,7 @@ async function init() {
   if (requested) chrome.storage.session.remove("openTab");
   showTab(requested || location.hash.slice(1) || "general");
 
-  for (const key of ["includeHeader", "includeLinks", "includeImages", "wrapInFence"]) {
+  for (const key of ["answerOnly", "sendScreenshot", "includeHeader", "includeLinks", "includeImages", "wrapInFence"]) {
     const box = $(key);
     box.checked = settings[key];
     box.addEventListener("change", async () => {
@@ -150,7 +150,7 @@ async function renderLicense() {
   $("license-free").hidden = active;
   $("license-active").hidden = !active;
   if (active) {
-    const parts = ["Lifetime license"];
+    const parts = ["Pro license"];
     if (license.email) parts.push(license.email);
     $("license-info").textContent = parts.join(" · ");
   }

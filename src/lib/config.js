@@ -1,4 +1,4 @@
-// Stripe Payment Link for Copy for AI Pro (one-time $9).
+// Stripe Payment Link for Copy for AI Pro ($4.99/month subscription).
 export const PRO_CHECKOUT_URL = "https://buy.stripe.com/cNieVf5Me70wcA4fdS2Ji00";
 
 // License server (server/): verifies the Stripe purchase and returns a signed key.

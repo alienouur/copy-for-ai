@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "Copy for AI – Page to Markdown for ChatGPT & Claude",
+  "name": "Copy for AI – Solve any question on the page",
   "short_name": "Copy for AI",
-  "version": "1.0.0",
-  "description": "Copy any web page, selection or all your tabs as clean Markdown ready to paste into ChatGPT, Claude or Gemini. Token counter included.",
+  "version": "1.1.0",
+  "description": "Reads the open page (or a screenshot of it) and gives you the answer – with or without explanation. Also copies pages as Markdown.",
   "minimum_chrome_version": "116",
   "icons": {
     "16": "icons/icon16.png",
@@ -13,7 +13,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Copy for AI (Alt+Shift+C)"
+    "default_title": "Copy for AI – Solve this page"
   },
   "options_page": "options.html",
   "background": {

@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Copy for AI – Copy any web page as clean Markdown for ChatGPT & Claude</title>
-  <meta name="description" content="Chrome extension that copies any web page, selection or all your open tabs as clean Markdown ready to paste into ChatGPT, Claude or Gemini. Token counter, prompt templates, one click." />
-  <meta property="og:title" content="Copy for AI – Page to Markdown for ChatGPT & Claude" />
-  <meta property="og:description" content="One click turns any web page into clean, token-efficient Markdown for your AI chat." />
+  <title>Copy for AI – Solve any question on the page with one click</title>
+  <meta name="description" content="Chrome extension for students: it reads the open page (or takes a screenshot when the text can't be read) and gives you the answer – answer only or with a step-by-step explanation. Also copies pages as clean Markdown for ChatGPT & Claude." />
+  <meta property="og:title" content="Copy for AI – Solve any question on the page" />
+  <meta property="og:description" content="One click reads the page, understands the question and shows the answer. Works on quizzes, PDFs, images and worksheets." />
   <meta property="og:image" content="screenshot-popup.png" />
   <link rel="icon" href="icon512.png" />
   <link rel="stylesheet" href="style.css" />
@@ -24,21 +24,21 @@
     </header>
 
     <section class="hero">
-      <h1>Paste web pages into ChatGPT<br />without the mess</h1>
-      <p>Copy for AI turns any page, selection or all your open tabs into clean Markdown – no menus, no ads, no cookie banners. Just the content your AI needs, with a token count so you never blow the context window.</p>
-      <a class="cta" id="install" href="https://chromewebstore.google.com/" rel="noopener">Add to Chrome – it's free</a>
+      <h1>Stuck on a question?<br />Click once, get the answer.</h1>
+      <p>Copy for AI reads the page you're on – a quiz, a worksheet, a PDF, even a photo of a problem – and gives you the answer. Turn on <strong>Answer only</strong> for just the result, or ask for a step-by-step explanation when you want to actually learn it.</p>
+      <a class="cta" id="install" href="https://chromewebstore.google.com/" rel="noopener">Add to Chrome – 5 free answers a day</a>
       <a class="cta secondary" href="#pricing">See Pro</a>
-      <span class="sub">Works with ChatGPT, Claude, Gemini, Perplexity, Copilot and any chat that accepts text.</span>
-      <img class="shot" src="screenshot-popup.png" width="640" alt="Copy for AI popup showing a page copied with word and token counts" />
+      <span class="sub">Math, physics, chemistry, programming, languages, multiple choice – answers in the language of the question.</span>
+      <img class="shot" src="screenshot-popup.png" width="640" alt="Copy for AI popup showing the answer to a question on the page" />
     </section>
 
     <section id="features" class="grid">
-      <div class="card"><h3>Clean Markdown, not raw HTML</h3><p>Readability-grade extraction removes navigation, ads, footers and footnote clutter. Headings, lists, tables and code blocks survive intact.</p></div>
-      <div class="card"><h3>Token counter built in</h3><p>See words and estimated tokens before you paste, with warnings when a page won't fit GPT-4o or Claude's context.</p></div>
-      <div class="card"><h3>Prompt templates</h3><p>Wrap the content in “Summarize”, “Explain simply”, “Key points” or your own template. Paste once, done.</p></div>
-      <div class="card"><h3>Selection or whole page</h3><p>Select a paragraph or grab the entire article. Right-click menu and <kbd>Alt+Shift+C</kbd> shortcut included.</p></div>
-      <div class="card"><h3>All tabs at once <em>(Pro)</em></h3><p>Researching across 12 tabs? Bundle them into one structured document with a source line for every page.</p></div>
-      <div class="card"><h3>Private by design</h3><p>Everything runs in your browser. No account, no servers, no tracking. Your pages never leave your machine.</p></div>
+      <div class="card"><h3>Understands the whole page</h3><p>Reads the text of the page you have open and solves every question it finds – numbered, so you can match answers to questions.</p></div>
+      <div class="card"><h3>Can't read it? It looks at it</h3><p>Scanned PDFs, images, diagrams, math rendered as pictures, locked quiz platforms: when the text isn't readable, a screenshot of the page is analysed instead.</p></div>
+      <div class="card"><h3>Answer only – or explain</h3><p>Flip <strong>Answer only</strong> for the bare result (A / 42 / true). Click <strong>Explain</strong> to get the steps when you need to understand the method.</p></div>
+      <div class="card"><h3>Ask about one thing</h3><p>Select a question on the page, or type “only question 3”, and it focuses on exactly that.</p></div>
+      <div class="card"><h3>Professional-grade model</h3><p>Powered by Google Gemini 2.5 with vision. Fast, accurate on STEM, and it answers in the same language as your question.</p></div>
+      <div class="card"><h3>Still copies pages as Markdown</h3><p>Copy a page, a selection or all your tabs as clean Markdown for ChatGPT or Claude – with token counts and prompt templates.</p></div>
     </section>
 
     <h2 id="pricing">Simple pricing</h2>
@@ -47,22 +47,22 @@
         <div>Free</div>
         <div class="amount">$0</div>
         <ul>
+          <li><strong>5 answers per day</strong> (text + screenshot)</li>
+          <li>Answer-only and Explain modes</li>
           <li>Copy page or selection as Markdown</li>
-          <li>5 built-in prompt templates</li>
-          <li>Token & word counter</li>
           <li>Keyboard shortcut & right-click menu</li>
         </ul>
         <a class="cta secondary" style="margin-left:0" href="https://chromewebstore.google.com/">Add to Chrome</a>
       </div>
       <div class="price pro">
         <div>Pro</div>
-        <div class="amount">$9 <small>one-time · lifetime</small></div>
+        <div class="amount">$4.99 <small>/ month · cancel anytime</small></div>
         <ul>
+          <li><strong>Unlimited answers</strong>, every day</li>
           <li>Everything in Free</li>
           <li>Bundle all open tabs into one document</li>
           <li>Unlimited custom prompt templates</li>
           <li>Copy history (last 30 items)</li>
-          <li>All future Pro features</li>
         </ul>
         <a class="cta" id="buy" href="https://buy.stripe.com/cNieVf5Me70wcA4fdS2Ji00">Get Pro</a>
         <p class="sub">Secure checkout by Stripe. Your license key appears right after payment. <a href="thanks.html">Lost your key?</a></p>
@@ -71,11 +71,11 @@
 
     <h2 id="faq">FAQ</h2>
     <div class="faq">
-      <details><summary>Does it work with Claude and Gemini?</summary><p>Yes. The output is plain Markdown text, so it works anywhere you can paste text.</p></details>
-      <details><summary>Does the extension send my pages anywhere?</summary><p>No. Extraction and formatting happen entirely inside your browser. The only network request is fetching your Pro license key from our license server after you buy, if you do.</p></details>
-      <details><summary>How accurate is the token count?</summary><p>It is an estimate (about 4 characters per token for English) – within roughly 10–15% of what OpenAI and Anthropic tokenizers report.</p></details>
-      <details><summary>Can I use Pro on multiple computers?</summary><p>Yes. Your key is a lifetime license for personal use; activate it in every browser you use, and it syncs with your Chrome profile.</p></details>
-      <details><summary>Refunds?</summary><p>If Pro doesn't work for you, email us within 14 days for a full refund.</p></details>
+      <details><summary>What kind of questions can it solve?</summary><p>Anything written on a web page: multiple choice, short answer, math and physics problems, chemistry, code, grammar, reading comprehension. If the page is a PDF or an image, the screenshot is analysed instead.</p></details>
+      <details><summary>Does the extension send my pages anywhere?</summary><p>Only when you click <em>Solve</em>. The page text and, if enabled, a screenshot of the visible area are sent to our server and processed by Google Gemini to produce the answer. They are not stored. Copying as Markdown stays entirely in your browser. See the <a href="privacy.html">privacy policy</a>.</p></details>
+      <details><summary>Do I need my own API key or account?</summary><p>No. Install and click – no sign-up. Pro is unlocked with a license key you receive right after checkout.</p></details>
+      <details><summary>Can I use Pro on multiple computers?</summary><p>Yes. Activate your key in every browser you use; it syncs with your Chrome profile.</p></details>
+      <details><summary>How do I cancel?</summary><p>Any time from the Stripe receipt email (“Manage subscription”) or by emailing us. You keep Pro until the end of the paid month.</p></details>
     </div>
 
     <footer>
