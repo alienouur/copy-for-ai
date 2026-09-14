@@ -1,0 +1,93 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Copy for AI</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        <img src="icons/icon32.png" alt="" width="20" height="20" />
+        <span>Copy for AI</span>
+      </div>
+      <div class="head-actions">
+        <a id="pro-badge" class="badge" href="#" title="Upgrade to Pro">Upgrade</a>
+        <button id="open-options" class="icon-btn" title="Settings" aria-label="Settings">⚙</button>
+      </div>
+    </header>
+
+    <div id="page-bar" class="page-bar">
+      <span class="dot"></span>
+      <span id="page-title" class="page-title">This page</span>
+      <button id="new-chat" class="link-btn" title="Start over for this page" hidden>New chat</button>
+    </div>
+
+    <main id="thread" class="thread">
+      <section id="empty" class="empty">
+        <h2>Stuck on a question?</h2>
+        <p>I read the page (or take a screenshot when it can't be read) and give you the answers. Select text first to solve only that part.</p>
+        <button id="solve-btn" class="primary big">Solve this page</button>
+        <p class="hint-line">Then ask follow-ups like “why?” or “explain #3” below. <kbd id="shortcut-hint">Alt+Shift+S</kbd> solves from anywhere.</p>
+      </section>
+      <div id="messages"></div>
+      <div id="status" class="status" hidden></div>
+    </main>
+
+    <footer class="composer">
+      <div id="chips" class="chips" hidden>
+        <button class="chip" data-q="Explain the answers step by step." data-mode="explain">Explain</button>
+        <button class="chip" data-q="Double-check every answer and correct any mistakes." data-mode="explain">Double-check</button>
+        <button class="chip" data-q="Explain it more simply, like to a beginner." data-mode="explain">Simpler</button>
+        <button class="chip" data-q="Solve the questions on this page." data-mode="auto" data-fresh="1">Solve again</button>
+      </div>
+      <div class="input-row">
+        <textarea id="question" rows="1" placeholder="Ask about this page… (optional)"></textarea>
+        <button id="send-btn" class="primary" title="Send (Enter)">Solve</button>
+      </div>
+      <div class="toggles">
+        <label title="Show just the final answers, no explanation"><input type="checkbox" id="answerOnly" /> Answer only</label>
+        <label title="Also send a screenshot of the visible page so images, diagrams and PDFs are understood"><input type="checkbox" id="sendScreenshot" /> Screenshot</label>
+        <span id="quota" class="quota"></span>
+      </div>
+
+      <details id="copy-tools">
+        <summary>Copy as Markdown for ChatGPT / Claude</summary>
+        <label class="field">
+          <span>Prompt template</span>
+          <select id="template"></select>
+        </label>
+        <div class="toggles">
+          <label><input type="checkbox" id="includeLinks" /> Links</label>
+          <label><input type="checkbox" id="includeImages" /> Images</label>
+          <label><input type="checkbox" id="includeHeader" /> Title & URL</label>
+        </div>
+        <div class="row">
+          <button id="copy-page">Copy page</button>
+          <button id="copy-selection">Copy selection</button>
+          <button id="copy-tabs" title="Bundle every tab in this window into one document">
+            All tabs <span class="pro-tag">PRO</span>
+          </button>
+        </div>
+        <div id="copy-status" class="status" hidden></div>
+        <p class="hint-line"><a href="#" id="open-history">History <span class="pro-tag">PRO</span></a> · <kbd id="copy-shortcut-hint">Alt+Shift+C</kbd> copies the page</p>
+      </details>
+    </footer>
+
+    <template id="tpl-user">
+      <div class="msg user"><div class="bubble"></div></div>
+    </template>
+    <template id="tpl-model">
+      <div class="msg model">
+        <div class="bubble answer"></div>
+        <div class="msg-actions">
+          <button class="mini copy">Copy</button>
+          <button class="mini explain">Explain</button>
+          <span class="meta"></span>
+        </div>
+      </div>
+    </template>
+
+    <script src="sidepanel.js"></script>
+  </body>
+</html>

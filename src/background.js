@@ -5,6 +5,8 @@ const MENU_SOLVE = "cfa-solve";
 const MENU_PAGE = "cfa-copy-page";
 const MENU_SELECTION = "cfa-copy-selection";
 
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
+
 chrome.runtime.onInstalled.addListener(({ reason }) => {
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({ id: MENU_SOLVE, title: "Solve with Copy for AI", contexts: ["page", "selection"] });
@@ -25,18 +27,26 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   run(tab, info.menuItemId === MENU_SELECTION ? "selection" : "page");
 });
 
+/** Opens the side panel for the tab's window and asks it to solve the page right away. */
 async function openSolver(tab) {
+  // open() must run within the user gesture, so don't await anything before it.
+  const opening = chrome.sidePanel.open({ windowId: tab.windowId });
+  await chrome.storage.session.set({ pendingSolve: { tabId: tab.id, ts: Date.now() } });
   try {
-    await chrome.action.openPopup({ windowId: tab.windowId });
+    await opening;
   } catch {
-    notify("Copy for AI", "Click the Copy for AI icon in the toolbar, then “Solve this page”.");
+    notify("Copy for AI", "Click the Copy for AI icon in the toolbar to open the solver.");
+    return;
   }
+  // Already-open panels won't reload, so nudge them; a freshly opened one reads pendingSolve itself.
+  chrome.runtime.sendMessage({ type: "cfa-solve-now" }).catch(() => {});
 }
 
 chrome.commands.onCommand.addListener(async (command, tab) => {
-  if (command !== "copy-page") return;
   const target = tab || (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
-  if (target) run(target, "auto");
+  if (!target) return;
+  if (command === "solve-page") openSolver(target);
+  else if (command === "copy-page") run(target, "auto");
 });
 
 async function run(tab, mode) {

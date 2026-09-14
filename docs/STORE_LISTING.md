@@ -15,11 +15,13 @@ English
 ## Description
 Stuck on a question? Click once and get the answer.
 
-Copy for AI reads the page you have open – a quiz, a worksheet, an exercise sheet, a PDF, even a photo of a problem – understands the questions on it and shows you the answers right inside the popup. Turn on "Answer only" for just the result, or click "Explain" when you want the steps.
+Copy for AI reads the page you have open – a quiz, a worksheet, an exercise sheet, a PDF, even a photo of a problem – understands the questions on it and shows you the answers in a side panel that stays open next to the page. Turn on "Answer only" for just the result, or click "Explain" when you want the steps.
 
 HOW IT WORKS
-• Open the page with the question(s) and click the Copy for AI icon
-• Click "Solve this page" – the answer appears in a second or two
+• Open the page with the question(s) and click the Copy for AI icon (or press Alt+Shift+S)
+• Click "Solve this page" – the answer streams in as it is written
+• Ask follow-ups: "why?", "explain #3", "in Arabic" – it remembers the page and the conversation
+• Reload or scroll all you want: the panel and your answers stay where they are
 • Optional: select one question first, or type "only question 3", to focus on exactly that
 
 WHEN THE PAGE CAN'T BE READ
@@ -32,7 +34,7 @@ FEATURES
 ✓ Screenshot understanding for PDFs, images and diagrams
 ✓ Answers in the same language as the question
 ✓ Copy the answer with one click
-✓ Powered by Google Gemini 2.5 – no API key or account needed
+✓ Powered by Google Gemini – no API key or account needed
 ✓ Bonus: copy any page, selection or all tabs as clean Markdown for ChatGPT / Claude (token counter + prompt templates)
 
 FREE
@@ -58,7 +60,9 @@ Helps the user understand and answer the questions on the current web page: on u
 - contextMenus: provide "Solve with Copy for AI" / "Copy page for AI" / "Copy selection for AI" right-click items.
 - clipboardWrite: place the answer or the generated Markdown on the clipboard.
 - offscreen: write to the clipboard from the keyboard shortcut / context menu (service workers have no clipboard access).
-- notifications: confirm a successful copy when triggered via shortcut/context menu (no popup visible).
+- notifications: confirm a successful copy when triggered via shortcut/context menu (no UI visible).
+- sidePanel: the solver UI lives in Chrome's side panel so it stays open while the user reads, scrolls or reloads the page.
+- <all_urls> (optional, requested at runtime on first Solve): lets the side panel keep reading the page after a reload or navigation without another toolbar click. Declining keeps the extension working through activeTab.
 - tabs + <all_urls> (optional, requested at runtime): the Pro "All tabs" feature needs to enumerate and read the other open tabs. Only requested when the user first uses that feature.
 - Remote code: none. The extension only exchanges JSON with https://copyforai-license.onrender.com.
 
@@ -68,8 +72,8 @@ Helps the user understand and answer the questions on the current web page: on u
 - Privacy policy URL: https://copyforai.onrender.com/privacy.html
 
 ## Screenshots needed (1280×800 or 640×400)
-1. Popup over a multiple-choice quiz page showing "Answer only" result (e.g. "1. B  2. D  3. A")
-2. Popup with "Explain" result showing worked steps for a math problem
+1. Side panel next to a multiple-choice quiz page showing "Answer only" result (e.g. "1. B  2. D  3. A")
+2. Side panel with a follow-up "why?" and the "Explain" result showing worked steps for a math problem
 3. Screenshot mode on a PDF/image worksheet with the answer
 4. Options → License page showing Pro
 5. Copy as Markdown tools (secondary feature)

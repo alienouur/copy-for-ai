@@ -11,7 +11,7 @@ mkdirSync(dist, { recursive: true });
 await build({
   entryPoints: {
     background: "src/background.js",
-    popup: "src/popup.js",
+    sidepanel: "src/sidepanel.js",
     options: "src/options.js",
     offscreen: "src/offscreen.js",
     extract: "src/extract.js",

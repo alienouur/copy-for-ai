@@ -21,7 +21,8 @@
 
       <h2>What the extension accesses</h2>
       <ul>
-        <li><strong>The active tab, when you ask it to.</strong> When you click the extension, use the keyboard shortcut or the right-click menu, the extension reads the current page (or your selection). For <em>Copy</em>, the page is converted to Markdown locally and placed on your clipboard. For <em>Solve</em>, the extracted text and an optional screenshot of the visible part of the tab are sent to our solver service (below).</li>
+        <li><strong>The active tab, when you ask it to.</strong> When you click the extension, use the keyboard shortcut or the right-click menu, the extension reads the current page (or your selection). For <em>Copy</em>, the page is converted to Markdown locally and placed on your clipboard. For <em>Solve</em>, the extracted text and an optional screenshot of the visible part of the tab are sent to our solver service (below). Follow-up questions resend the page text together with the earlier questions and answers of that conversation so the model has context.</li>
+        <li><strong>Conversations.</strong> Your questions and the answers are kept in Chrome's session storage on your device (per tab) so they survive a page reload; they are cleared when you close Chrome or start a new chat, and never stored on our server.</li>
         <li><strong>All open tabs (optional, Pro).</strong> The “All tabs” feature asks for permission to read your other tabs only when you first use it. The content is combined locally and copied to your clipboard.</li>
         <li><strong>Settings.</strong> Your preferences and prompt templates are stored with Chrome's sync storage so they follow your Chrome profile. Pro copy history is stored only on the local device.</li>
       </ul>
