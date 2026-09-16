@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "Copy for AI – Solve any question on the page",
   "short_name": "Copy for AI",
-  "version": "1.2.1",
-  "description": "Reads the open page (or a screenshot of it) and gives you the answer in a side panel that stays open – with or without explanation. Also copies pages as Markdown.",
+  "version": "1.2.2",
+  "description": "Solves the questions on the open page (text or screenshot) in a side panel, answer only or with steps. Copies pages as Markdown too.",
   "minimum_chrome_version": "116",
   "icons": {
     "16": "icons/icon16.png",

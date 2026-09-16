@@ -4,7 +4,7 @@
 Copy for AI – Solve any question on the page
 
 ## Summary (max 132)
-Reads the open page (or a screenshot of it) and gives you the answer – with or without explanation. Also copies pages as Markdown.
+Solves the questions on the open page (text or screenshot) in a side panel, answer only or with steps. Copies pages as Markdown too.
 
 ## Category
 Productivity → Education
