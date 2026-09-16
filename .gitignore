@@ -4,3 +4,4 @@ release/
 dist-test/
 server/.env
 server/.venv/
+dist-shots/
