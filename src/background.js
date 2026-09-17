@@ -81,19 +81,23 @@ async function startLesson(tab, mode) {
   chrome.runtime.sendMessage({ type: "cfa-lesson-finished", tabId: tab.id }).catch(() => {});
 }
 
-chrome.notifications?.onClicked.addListener(async (id) => {
+chrome.notifications?.onClicked.addListener((id) => {
   if (!id.startsWith(NOTIFY_LESSON)) return;
   chrome.notifications.clear(id);
   const tabId = Number(id.slice(NOTIFY_LESSON.length));
-  const job = await loadJob(tabId);
-  try {
-    const tab = await chrome.tabs.get(tabId);
-    await chrome.windows.update(tab.windowId, { focused: true });
-    await chrome.tabs.update(tabId, { active: true });
-    await chrome.sidePanel.open({ tabId, windowId: tab.windowId });
-  } catch {
-    if (job?.url) chrome.tabs.create({ url: job.url }).catch(() => {});
-  }
+  // open() must run within the user gesture, so don't await anything before it.
+  const opening = chrome.sidePanel.open({ tabId }).catch(() => {});
+  chrome.tabs.get(tabId).then(
+    async (tab) => {
+      await chrome.windows.update(tab.windowId, { focused: true }).catch(() => {});
+      await chrome.tabs.update(tabId, { active: true }).catch(() => {});
+      await opening;
+    },
+    async () => {
+      const job = await loadJob(tabId);
+      if (job?.url) chrome.tabs.create({ url: job.url }).catch(() => {});
+    },
+  );
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
