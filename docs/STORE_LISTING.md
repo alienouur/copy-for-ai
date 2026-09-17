@@ -57,10 +57,10 @@ Helps the user understand and answer the questions on the current web page: on u
 - activeTab: read the current page's content and capture a screenshot of the visible tab when the user clicks "Solve" or "Copy".
 - scripting: inject the extraction script into the active tab on user action.
 - storage: save user preferences, templates, license key, a random device id for the free daily quota, and (Pro) local copy history.
-- contextMenus: provide "Solve with Copy for AI" / "Copy page for AI" / "Copy selection for AI" right-click items.
+- contextMenus: provide "Solve with Copy for AI" / "Solve whole lesson (Agent)" / "Copy page for AI" / "Copy selection for AI" right-click items.
 - clipboardWrite: place the answer or the generated Markdown on the clipboard.
 - offscreen: write to the clipboard from the keyboard shortcut / context menu (service workers have no clipboard access).
-- notifications: confirm a successful copy when triggered via shortcut/context menu (no UI visible).
+- notifications: tell the user when the background "Solve whole lesson" job finishes or fails (the side panel may be closed), and confirm a successful copy when triggered via shortcut/context menu (no UI visible).
 - sidePanel: the solver UI lives in Chrome's side panel so it stays open while the user reads, scrolls or reloads the page.
 - <all_urls> (optional, requested at runtime on first Solve): lets the side panel keep reading the page after a reload or navigation without another toolbar click. Declining keeps the extension working through activeTab.
 - tabs + <all_urls> (optional, requested at runtime): the Pro "All tabs" feature needs to enumerate and read the other open tabs. Only requested when the user first uses that feature.

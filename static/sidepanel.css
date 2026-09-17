@@ -123,6 +123,23 @@ button:hover { border-color: var(--accent); }
 button:disabled { opacity: .6; cursor: progress; }
 button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 600; white-space: nowrap; }
 button.primary.big { width: 100%; padding: 10px; font-size: 14px; }
+button.secondary.big { width: 100%; padding: 9px; font-size: 13px; margin-top: 8px; color: var(--accent); border-color: var(--accent); background: var(--bg); font-weight: 600; }
+.job { margin-top: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg2); font-size: 12px; }
+.job-head { display: flex; align-items: center; gap: 8px; }
+.job-title { font-weight: 600; }
+.job-title::before { content: "⚙"; margin-right: 4px; color: var(--accent); }
+.job.running .job-title::before { display: inline-block; animation: spin 2.4s linear infinite; }
+.job-count { color: var(--muted); }
+.job-head .mini { margin-left: auto; }
+.bar { height: 5px; margin: 8px 0 6px; border-radius: 999px; background: var(--chip); overflow: hidden; }
+.bar-fill { height: 100%; width: 0; border-radius: inherit; background: var(--accent); transition: width .3s; }
+.job.running .bar-fill.indeterminate { width: 35%; animation: slide 1.4s ease-in-out infinite; }
+.job.done .bar-fill { background: var(--ok); }
+.job.error .bar-fill, .job.cancelled .bar-fill { background: var(--err); }
+.job-msg { color: var(--muted); }
+.job.error .job-msg { color: var(--err); }
+.job-msg a { color: var(--accent); }
+@keyframes slide { 0% { margin-left: 0; } 50% { margin-left: 65%; } 100% { margin-left: 0; } }
 .toggles { display: flex; gap: 10px; margin: 8px 0 0; color: var(--muted); font-size: 12px; align-items: center; flex-wrap: wrap; }
 .toggles label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
 .toggles input { margin: 0; }

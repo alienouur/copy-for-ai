@@ -70,14 +70,14 @@ export async function requestPageAccess() {
 }
 
 /** Reads the page (selection first, then article text). Returns {text, usedSelection} or null when unreadable. */
-export async function readTab(tab) {
+export async function readTab(tab, { maxChars = MAX_TEXT_CHARS } = {}) {
   if (tab.url && !isSupportedUrl(tab.url)) return null;
   try {
     const doc = await extractFromTab(tab.id, { mode: "auto", includeLinks: false, includeImages: false });
     const text = (doc.markdown || "").trim();
     if (text.length < MIN_USEFUL_TEXT) return null;
     const header = doc.usedSelection ? "" : `Title: ${doc.title}\n\n`;
-    return { text: (header + text).slice(0, MAX_TEXT_CHARS), usedSelection: doc.usedSelection };
+    return { text: (header + text).slice(0, maxChars), usedSelection: doc.usedSelection };
   } catch {
     return null;
   }

@@ -28,10 +28,21 @@
         <h2>Stuck on a question?</h2>
         <p>I read the page (or take a screenshot when it can't be read) and give you the answers. Select text first to solve only that part.</p>
         <button id="solve-btn" class="primary big">Solve this page</button>
+        <button id="lesson-btn" class="secondary big" title="Reads the whole lesson, solves every exercise in the background and notifies you when it's done">Solve whole lesson (Agent)</button>
         <p class="hint-line">Then ask follow-ups like “why?” or “explain #3” below. <kbd id="shortcut-hint">Alt+Shift+S</kbd> solves from anywhere.</p>
       </section>
       <div id="messages"></div>
       <div id="status" class="status" hidden></div>
+      <div id="job" class="job" hidden>
+        <div class="job-head">
+          <span class="job-title">Agent</span>
+          <span id="job-count" class="job-count"></span>
+          <button id="job-cancel" class="mini">Cancel</button>
+          <button id="job-dismiss" class="mini" hidden>Dismiss</button>
+        </div>
+        <div class="bar"><div id="job-bar" class="bar-fill"></div></div>
+        <div id="job-msg" class="job-msg"></div>
+      </div>
     </main>
 
     <footer class="composer">
@@ -40,6 +51,7 @@
         <button class="chip" data-q="Double-check every answer and correct any mistakes." data-mode="explain">Double-check</button>
         <button class="chip" data-q="Explain it more simply, like to a beginner." data-mode="explain">Simpler</button>
         <button class="chip" data-q="Solve the questions on this page." data-mode="auto" data-fresh="1">Solve again</button>
+        <button class="chip" id="lesson-chip" title="Solve the whole lesson in the background">Whole lesson</button>
       </div>
       <div class="input-row">
         <textarea id="question" rows="1" placeholder="Ask about this page… (optional)"></textarea>

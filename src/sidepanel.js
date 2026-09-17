@@ -6,6 +6,7 @@ import { contextWarning, formatCount } from "./lib/format.js";
 import { PRO_CHECKOUT_URL } from "./lib/config.js";
 import { fetchPlan, hasPageAccess, requestPageAccess, solveTab } from "./lib/solver.js";
 import { renderMarkdown } from "./lib/markdown.js";
+import { jobKey, loadJob } from "./lib/lesson.js";
 
 const $ = (id) => document.getElementById(id);
 const SOLVE_PROMPT = "Solve the questions on this page.";
@@ -53,7 +54,82 @@ async function syncTab() {
     }
     renderThread();
   }
+  if (switched || navigated || !job) renderJob(await loadJob(tab.id));
 }
+
+// --- Whole-lesson agent (runs in the background worker; the panel only shows storage-backed progress)
+
+let job = null;
+
+async function startLesson() {
+  if (solving) return;
+  const tab = await activeTab();
+  if (!tab) return;
+  currentTab = tab;
+  hideStatus();
+  await ensureAccess(tab);
+  const mode = $("answerOnly").checked ? "answer" : "explain";
+  renderJob({ status: "running", tabId: tab.id, step: 0, total: 0, message: "Starting…" });
+  const res = await chrome.runtime.sendMessage({ type: "cfa-lesson-start", tab: { id: tab.id, windowId: tab.windowId, url: tab.url, title: tab.title }, mode }).catch(() => null);
+  if (!res?.ok) renderJob({ status: "error", tabId: tab.id, error: res?.error || "Could not start the agent. Reload the extension and try again." });
+}
+
+function cancelLesson() {
+  if (!job) return;
+  chrome.runtime.sendMessage({ type: "cfa-lesson-cancel", tabId: job.tabId }).catch(() => {});
+  renderJob({ ...job, message: "Stopping after the current part…" });
+  $("job-cancel").disabled = true;
+}
+
+async function dismissJob() {
+  if (job) chrome.storage.session.remove(jobKey(job.tabId));
+  renderJob(null);
+}
+
+function renderJob(next) {
+  job = next;
+  const box = $("job");
+  if (!job) {
+    box.hidden = true;
+    $("lesson-btn").disabled = false;
+    return;
+  }
+  const running = job.status === "running";
+  box.hidden = false;
+  box.className = `job ${job.status}`;
+  $("lesson-btn").disabled = running;
+  $("job-cancel").hidden = !running;
+  $("job-cancel").disabled = false;
+  $("job-dismiss").hidden = running;
+  $("job-count").textContent = job.total ? `${Math.min(job.step, job.total)}/${job.total}` : "";
+  const fill = $("job-bar");
+  fill.classList.toggle("indeterminate", running && !job.total);
+  const done = job.status === "done" ? job.total : Math.max(0, job.step - (running ? 1 : 0));
+  fill.style.width = job.total ? `${Math.round((done / job.total) * 100)}%` : running ? "" : "100%";
+  const msg = $("job-msg");
+  if (job.status === "error") {
+    msg.innerHTML = job.errorStatus === 402 ? `${escapeHtml(job.error)} ${upgradeLink("Upgrade – $4.99/month")}` : escapeHtml(job.error || "Something went wrong");
+  } else {
+    msg.textContent = job.message || "";
+  }
+  if (running) scrollToBottom();
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+}
+
+chrome.storage.session.onChanged.addListener(async (changes) => {
+  if (!currentTab) return;
+  const jobChange = changes[jobKey(currentTab.id)];
+  if (jobChange) renderJob(jobChange.newValue || null);
+  const threadChange = changes[threadKey(currentTab.id)];
+  if (threadChange && !solving) {
+    thread = threadChange.newValue || null;
+    renderThread();
+  }
+  if (jobChange?.newValue && jobChange.newValue.status !== "running") refreshQuota();
+});
 
 function safeHost(url) {
   try {
@@ -273,6 +349,16 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.type === "cfa-solve-now") consumePendingSolve();
 });
 
+// A job left as "running" without a live worker (e.g. the worker was restarted) is shown as interrupted.
+async function reconcileJob() {
+  if (job?.status !== "running") return;
+  const res = await chrome.runtime.sendMessage({ type: "cfa-lesson-running", tabId: job.tabId }).catch(() => null);
+  if (res && !res.running) {
+    const stale = { ...job, status: "error", error: "The agent was interrupted. Any solved parts are in the chat above — run it again to finish." };
+    chrome.storage.session.set({ [jobKey(job.tabId)]: stale });
+  }
+}
+
 // --- Copy as Markdown (legacy tools)
 
 function showCopyStatus(html, kind) {
@@ -374,6 +460,10 @@ async function init() {
   }
 
   $("solve-btn").addEventListener("click", () => ask({ question: $("question").value, fresh: true }));
+  $("lesson-btn").addEventListener("click", startLesson);
+  $("lesson-chip").addEventListener("click", startLesson);
+  $("job-cancel").addEventListener("click", cancelLesson);
+  $("job-dismiss").addEventListener("click", dismissJob);
   $("send-btn").addEventListener("click", () => ask({ question: $("question").value }));
   $("new-chat").addEventListener("click", () => {
     thread = null;
@@ -382,7 +472,7 @@ async function init() {
     renderThread();
     $("question").focus();
   });
-  for (const chip of document.querySelectorAll(".chip")) {
+  for (const chip of document.querySelectorAll(".chip[data-q]")) {
     chip.addEventListener("click", () =>
       ask({ question: chip.dataset.q, mode: chip.dataset.mode === "auto" ? undefined : chip.dataset.mode, fresh: !!chip.dataset.fresh }),
     );
@@ -420,6 +510,7 @@ async function init() {
   chrome.windows.onFocusChanged?.addListener(() => syncTab());
 
   await syncTab();
+  reconcileJob();
   refreshQuota();
   consumePendingSolve();
 }
