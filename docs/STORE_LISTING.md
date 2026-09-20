@@ -1,5 +1,7 @@
 # Chrome Web Store listing
 
+Published: https://chromewebstore.google.com/detail/okakcaelabanhieaaolinonpenojdppj (item ID `okakcaelabanhieaaolinonpenojdppj`)
+
 ## Name (max 75)
 Copy for AI – Solve any question on the page
 
