@@ -307,7 +307,7 @@ async function appendToThread(tab, job, results, meta, progress = null) {
   const thread = stored[threadKey(tab.id)] || { url: tab.url || "", messages: [] };
   if (thread.url && tab.url && thread.url.split("#")[0] !== tab.url.split("#")[0]) thread.messages = [];
   thread.url = tab.url || thread.url;
-  const partial = progress ? ` (${progress})` : results.length < job.total ? ` (${results.length} of ${job.total} parts)` : "";
+  const partial = progress ? ` (${progress})` : !job.fill && results.length < job.total ? ` (${results.length} of ${job.total} parts)` : "";
   const remaining = meta.plan === "pro" || meta.remaining == null ? "" : ` · ${meta.remaining} free left today`;
   thread.messages.push(
     { role: "user", text: LESSON_PROMPT },

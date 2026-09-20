@@ -373,7 +373,8 @@ if (!["q1", "p2", "p4", "q3", "q4", "q5"].every((n) => filledState.changes.inclu
 if (!/5 answers filled in on the page/.test(await popup.textContent("#job-msg"))) throw new Error("fill summary wrong");
 const quizAnswer = await popup.locator(".msg.model .bubble").last().textContent();
 if (!/1\..*6 × 7/.test(quizAnswer) || !/→ 42/.test(quizAnswer) || !/→ Paris/.test(quizAnswer) || !/Rayleigh/.test(quizAnswer)) throw new Error("quiz answers not listed in the thread");
-if (!/Agent · 5 questions on the page/.test(await popup.locator(".msg.model .meta").last().textContent())) throw new Error("quiz meta wrong");
+const quizMeta = await popup.locator(".msg.model .meta").last().textContent();
+if (!/Agent · 5 questions on the page/.test(quizMeta) || /parts\)/.test(quizMeta)) throw new Error("quiz meta wrong: " + quizMeta);
 const quizNotes = await sw.evaluate(() => globalThis.__notes);
 if (quizNotes.length !== 1 || !/5 answers filled in/.test(quizNotes[0].message) || !/Review it, then submit/.test(quizNotes[0].message)) throw new Error("quiz notification wrong: " + JSON.stringify(quizNotes));
 await article.screenshot({ path: "release/screenshot-quiz-filled.png" });
