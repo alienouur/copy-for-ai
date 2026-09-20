@@ -264,3 +264,29 @@ async def test_solve_follow_up_history(client, solve_env, monkeypatch):
 
     r = await client.post("/v1/solve", json={**DEVICE, "text": "q", "history": [{"role": "user", "text": "x" * 9000}]})
     assert r.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_solve_fill_structured(client, solve_env, monkeypatch):
+    calls = []
+    raw = json.dumps({"answers": [{"id": "q1", "option_ids": ["q1-1"], "text": "42"}, {"id": "q2", "text": "x = 2"}, "junk"]})
+    monkeypatch.setattr(main, "_gemini", make_gemini(answer=raw, calls=calls))
+    text = "Q q1 [choice]: 6*7?\n- q1-0: 40\n- q1-1: 42\nQ q2 [text]: Solve x+1=3"
+    r = await client.post("/v1/solve", json={**DEVICE, "text": text, "mode": "fill", "stream": True})
+    assert r.status_code == 200
+    assert r.json() == {
+        "answers": [{"id": "q1", "option_ids": ["q1-1"], "text": "42"}, {"id": "q2", "option_ids": [], "text": "x = 2"}],
+        "plan": "free",
+        "remaining": 1,
+        "model": main.GEMINI_MODEL,
+    }
+    sent = json.loads(calls[0].read())
+    assert calls[0].url.path.endswith(":generateContent")
+    assert sent["generationConfig"]["responseMimeType"] == "application/json"
+    assert sent["generationConfig"]["responseSchema"]["required"] == ["answers"]
+    assert "return JSON only" in sent["contents"][0]["parts"][-1]["text"]
+
+    monkeypatch.setattr(main, "_gemini", make_gemini(answer="not json"))
+    r = await client.post("/v1/solve", json={**DEVICE, "text": text, "mode": "fill"})
+    assert r.status_code == 422
+    assert (await client.post("/v1/me", json=DEVICE)).json()["remaining"] == 1  # malformed answers not charged

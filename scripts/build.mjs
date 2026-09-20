@@ -15,6 +15,7 @@ await build({
     options: "src/options.js",
     offscreen: "src/offscreen.js",
     extract: "src/extract.js",
+    fill: "src/fill.js",
   },
   bundle: true,
   format: "iife",
