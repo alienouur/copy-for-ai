@@ -72,10 +72,12 @@ async function startLesson(tab, mode) {
   }
   const job = await runLesson(tab, { mode });
   const title = (job.title || "this page").slice(0, 60);
+  const unit = job.fill ? "question" : "part";
   if (job.status === "done") {
-    notify("Lesson solved ✓", `${job.results} part${job.results > 1 ? "s" : ""} answered on “${title}”. Click to view.`, `${NOTIFY_LESSON}${tab.id}`, false);
+    const what = job.summary || `${job.results} ${unit}${job.results > 1 ? "s" : ""} answered`;
+    notify("Lesson solved ✓", `${what} on “${title}”. Review it, then submit.`, `${NOTIFY_LESSON}${tab.id}`, false);
   } else if (job.status === "error") {
-    notify("Lesson agent stopped", `${job.error}${job.results ? ` (${job.results} of ${job.total} parts saved)` : ""}`, `${NOTIFY_LESSON}${tab.id}`, false);
+    notify("Lesson agent stopped", `${job.error}${job.results ? ` (${job.results} of ${job.total} ${unit}s done)` : ""}`, `${NOTIFY_LESSON}${tab.id}`, false);
   }
   if (job.status !== "cancelled") flashBadge(job.status === "done" ? "✓" : "!", job.status === "done" ? "#16a34a" : "#dc2626", tab.id);
   chrome.runtime.sendMessage({ type: "cfa-lesson-finished", tabId: tab.id }).catch(() => {});

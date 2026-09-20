@@ -26,6 +26,34 @@ MODE_ANSWER = """OUTPUT ONLY THE FINAL ANSWERS. No explanation, no reasoning, no
 MODE_EXPLAIN = """For each question write **Answer:** followed by the final answer on the first line, then a short \
 step-by-step explanation (about 3–6 lines) of why it is correct. Number the questions as on the page."""
 
+MODE_FILL = """The PAGE TEXT is a list of questions extracted from a web form. Each question line looks like "Q <id> [<type>]: <question>" \
+and is followed by its options as "- <option id>: <option text>" for types choice / multi / select.
+Answer EVERY question and return JSON only, in this shape: {"answers": [{"id": "<question id>", "option_ids": [...], "text": "..."}]}.
+- choice / select: put exactly one option id in option_ids. multi: put every correct option id in option_ids.
+- text / open: leave option_ids empty and put the exact answer in "text" (just the number / word / short phrase / code to type; \
+no explanation), in the language of the question.
+- Always fill "text" with a short human-readable answer as well (for choices, the option text).
+If a screenshot is provided, use it to read formulas, figures or images the text lacks."""
+
+FILL_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "answers": {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "id": {"type": "STRING"},
+                    "option_ids": {"type": "ARRAY", "items": {"type": "STRING"}},
+                    "text": {"type": "STRING"},
+                },
+                "required": ["id", "text"],
+            },
+        }
+    },
+    "required": ["answers"],
+}
+
 FOLLOW_UP_ANSWER = """Answer this follow-up about the same page. Be concise and direct: give the answer itself, \
 no preamble, and only explain if the user asks why or how."""
 
@@ -64,7 +92,7 @@ class GeminiClient:
             context.append({"text": f"PAGE TEXT:\n{text}"})
         if not context:
             context.append({"text": "(no page content captured)"})
-        instruction = MODE_ANSWER if mode == "answer" else MODE_EXPLAIN
+        instruction = {"answer": MODE_ANSWER, "fill": MODE_FILL}.get(mode, MODE_EXPLAIN)
 
         turns = [t for t in (history or []) if t.get("text")][-MAX_HISTORY_TURNS:]
         if not turns:
@@ -91,14 +119,18 @@ class GeminiClient:
                 contents[-1]["parts"].extend(tail)
             else:
                 contents.append({"role": "user", "parts": tail})
+        generation: dict = {
+            "temperature": 0.2,
+            "maxOutputTokens": 8192 if mode == "fill" else 4096,
+            "thinkingConfig": {"thinkingBudget": self.thinking_budget},
+        }
+        if mode == "fill":
+            generation["responseMimeType"] = "application/json"
+            generation["responseSchema"] = FILL_SCHEMA
         return {
             "system_instruction": {"parts": [{"text": SYSTEM}]},
             "contents": contents,
-            "generationConfig": {
-                "temperature": 0.2,
-                "maxOutputTokens": 4096,
-                "thinkingConfig": {"thinkingBudget": self.thinking_budget},
-            },
+            "generationConfig": generation,
             "safetySettings": [
                 {"category": c, "threshold": "BLOCK_ONLY_HIGH"}
                 for c in (
@@ -148,6 +180,24 @@ class GeminiClient:
         if not answer:
             raise GeminiError("The model returned an empty answer. Try again or add a screenshot.", 422)
         return answer
+
+    async def fill(self, text: str, image_b64: str | None, image_mime: str, question: str) -> list[dict]:
+        """Structured answers for form questions: [{"id", "option_ids": [...], "text"}]."""
+        raw = await self.solve(text, image_b64, image_mime, question, "fill")
+        try:
+            data = json.loads(raw)
+        except ValueError:
+            raise GeminiError("The model returned malformed answers. Try again.", 422)
+        answers = data.get("answers") if isinstance(data, dict) else None
+        if not isinstance(answers, list):
+            raise GeminiError("The model returned malformed answers. Try again.", 422)
+        clean = []
+        for a in answers:
+            if not isinstance(a, dict) or not isinstance(a.get("id"), str):
+                continue
+            option_ids = [o for o in (a.get("option_ids") or []) if isinstance(o, str)]
+            clean.append({"id": a["id"], "option_ids": option_ids, "text": str(a.get("text") or "")})
+        return clean
 
     async def solve_stream(
         self, text: str, image_b64: str | None, image_mime: str, question: str, mode: str, history: list[dict] | None = None

@@ -129,7 +129,7 @@ class SolveBody(MeBody):
     image: str | None = None  # base64 (no data: prefix)
     image_mime: str = "image/jpeg"
     question: str = ""
-    mode: str = "answer"  # answer | explain
+    mode: str = "answer"  # answer | explain | fill (structured answers for form questions, never streamed)
     history: list[Turn] = Field(default_factory=list, max_length=24)  # earlier turns for follow-up questions
     stream: bool = False  # true -> text/event-stream of {"delta"} events ending with {"done"}
 
@@ -176,8 +176,8 @@ async def me(body: MeBody, request: Request):
 async def solve(body: SolveBody, request: Request):
     if not _gemini:
         raise HTTPException(503, "Answer service not configured")
-    if body.mode not in ("answer", "explain"):
-        raise HTTPException(400, "mode must be 'answer' or 'explain'")
+    if body.mode not in ("answer", "explain", "fill"):
+        raise HTTPException(400, "mode must be 'answer', 'explain' or 'fill'")
     if body.image and (len(body.image) > MAX_IMAGE_B64_CHARS or body.image_mime not in ("image/jpeg", "image/png", "image/webp")):
         raise HTTPException(413, "Screenshot too large")
     text = body.text.strip()[:MAX_TEXT_CHARS]
@@ -194,6 +194,15 @@ async def solve(body: SolveBody, request: Request):
 
     history = [t.model_dump() for t in body.history if t.role in ("user", "model")]
     meta = {"plan": plan["plan"], "remaining": remaining - 1, "model": GEMINI_MODEL}
+
+    if body.mode == "fill":
+        try:
+            answers = await _gemini.fill(text, body.image, body.image_mime, question)
+        except GeminiError as e:
+            raise HTTPException(e.status, str(e))
+        for k in plan["keys"]:
+            _consume(k)
+        return {"answers": answers, **meta}
 
     if not body.stream:
         try:

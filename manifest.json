@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Copy for AI – Solve any question on the page",
   "short_name": "Copy for AI",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Solves the questions on the open page (text or screenshot) in a side panel, answer only or with steps. Copies pages as Markdown too.",
   "minimum_chrome_version": "116",
   "icons": {

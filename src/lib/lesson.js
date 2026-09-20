@@ -1,6 +1,8 @@
-// "Solve whole lesson" agent: splits the page into parts (text chunks, or one screenshot per screen when the
-// page can't be read), solves them one after another in the background worker and writes progress to
-// chrome.storage.session so the side panel can show it and pick up the result even if it was closed.
+// "Solve whole lesson" agent. It first looks for questions with answer fields on the page (radios, checkboxes,
+// selects, text boxes, or plain numbered questions) and answers them in place, batch by batch, on the same tab.
+// Pages without recognisable questions fall back to text chunks / one screenshot per screen solved into the panel.
+// Everything runs in the background worker with progress in chrome.storage.session so the side panel can show it
+// and pick up the result even if it was closed. The agent never submits the form.
 import { api, captureTab, getDeviceId, hasPageAccess, readTab } from "./solver.js";
 import { getLicense } from "./license.js";
 import { getSettings } from "./settings.js";
@@ -10,6 +12,8 @@ const FULL_TEXT_CHARS = 240_000;
 const CHUNK_CHARS = 12_000;
 const MAX_SHOTS = 8;
 const SHOT_SETTLE_MS = 450;
+const BATCH_QUESTIONS = 20;
+const BATCH_CHARS = 9_000;
 
 export const jobKey = (tabId) => `job:${tabId}`;
 export const threadKey = (tabId) => `thread:${tabId}`;
@@ -90,6 +94,76 @@ export async function planLesson(tab, { screenshot, onProgress }) {
   return { parts: shots.map((image) => ({ text: "", image })), source: `${shots.length} screenshot${shots.length > 1 ? "s" : ""}` };
 }
 
+/** Injects fill.js into the tab and returns the questions it found ({title, questions}). */
+async function scanQuestions(tabId) {
+  await chrome.scripting.executeScript({ target: { tabId }, files: ["fill.js"] });
+  const [result] = await chrome.scripting.executeScript({ target: { tabId }, func: () => globalThis.__copyForAIFill.scan() });
+  return result?.result || { title: "", questions: [] };
+}
+
+async function applyAnswers(tabId, answers, questions) {
+  const [result] = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: (a, q) => globalThis.__copyForAIFill.apply(a, q),
+    args: [answers, questions],
+  });
+  return result?.result || { filled: 0, shown: 0, missing: answers.length };
+}
+
+async function scrollToQuestion(tabId, id) {
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    func: (qid) => document.querySelector(`[data-cfa-q="${qid}"]`)?.scrollIntoView({ block: "start" }),
+    args: [id],
+  }).catch(() => {});
+  await sleep(SHOT_SETTLE_MS);
+}
+
+/** Serialises questions for the fill prompt: "Q <id> [<type>]: text" followed by "- <option id>: text" lines. */
+export function describeQuestions(questions) {
+  return questions
+    .map((q) => {
+      const opts = (q.options || []).map((o) => `- ${o.id}: ${o.text}`);
+      return [`Q ${q.id} [${q.type}]: ${q.text}`, ...opts].join("\n");
+    })
+    .join("\n\n");
+}
+
+/** Groups questions into request batches of at most BATCH_QUESTIONS / ~BATCH_CHARS each. */
+export function batchQuestions(questions, { maxCount = BATCH_QUESTIONS, maxChars = BATCH_CHARS } = {}) {
+  const batches = [];
+  let current = [];
+  let size = 0;
+  for (const q of questions) {
+    const len = describeQuestions([q]).length + 2;
+    if (current.length && (current.length >= maxCount || size + len > maxChars)) {
+      batches.push(current);
+      current = [];
+      size = 0;
+    }
+    current.push(q);
+    size += len;
+  }
+  if (current.length) batches.push(current);
+  return batches;
+}
+
+function fillQuestion(i, n, title) {
+  const scope = n > 1 ? `These are questions ${i + 1}/${n} batch of the lesson "${title}". ` : `These are the questions of the lesson "${title}". `;
+  return `${scope}Answer every one of them correctly.`;
+}
+
+/** Thread text for answers filled in on the page: a numbered list of question → answer. */
+export function compileFilled(items) {
+  return items
+    .map((it, i) => {
+      const q = it.question.length > 140 ? it.question.slice(0, 137).trimEnd() + "…" : it.question;
+      const state = it.filled ? "" : it.type === "open" ? "" : " _(shown next to the question)_";
+      return `${i + 1}. ${q}\n   **→ ${it.answer || "(no answer)"}**${state}`;
+    })
+    .join("\n");
+}
+
 function partQuestion(i, n, mode) {
   const scope = n > 1 ? `This is part ${i + 1} of ${n} of the lesson. ` : "";
   const style = mode === "answer" ? "Give only the final answers." : "Give the answers with concise step-by-step working.";
@@ -129,19 +203,70 @@ export async function runLesson(tab, { mode }) {
   // Extension API calls reset the service worker's idle timer, so ping storage while a long request is in flight.
   const keepAlive = setInterval(() => chrome.storage.session.get("keepalive").catch(() => {}), 20_000);
   const results = [];
+  const filled = []; // fill mode: {question, type, answer, filled} per answered question
+  let answered = 0;
   let meta = {};
   try {
     const { sendScreenshot } = await getSettings();
-    const { parts, source } = await planLesson(tab, { screenshot: sendScreenshot, onProgress: (message) => save({ message }) });
-    await save({ total: parts.length, source });
     const license = await getLicense();
     const deviceId = await getDeviceId();
+    const auth = { device_id: deviceId, license_key: license?.key || null };
+
+    await save({ message: "Looking for questions on the page…" });
+    const scanned = await scanQuestions(tab.id).catch(() => null);
+    if (scanned?.questions.length) {
+      const { questions } = scanned;
+      const batches = batchQuestions(questions);
+      const counts = { filled: 0, shown: 0 };
+      await save({ total: questions.length, source: `${questions.length} question${questions.length > 1 ? "s" : ""} on the page`, fill: true });
+      for (let b = 0; b < batches.length; b++) {
+        if (state.cancelled) break;
+        const batch = batches[b];
+        await save({ step: answered, message: `Solving questions ${answered + 1}–${answered + batch.length} of ${questions.length}…` });
+        let image = null;
+        if (sendScreenshot) {
+          await scrollToQuestion(tab.id, batch[0].id);
+          image = await captureTab(tab);
+        }
+        const data = await api("/v1/solve", {
+          ...auth,
+          text: describeQuestions(batch),
+          image,
+          image_mime: "image/jpeg",
+          question: fillQuestion(b, batches.length, scanned.title || tab.title || ""),
+          mode: "fill",
+          history: [],
+          stream: false,
+        }, { onRetry: () => save({ message: "Waking up the server…" }) });
+        meta = data;
+        const answers = Array.isArray(data.answers) ? data.answers : [];
+        await save({ message: `Writing answers ${answered + 1}–${answered + batch.length} into the page…` });
+        const applied = await applyAnswers(tab.id, answers, batch);
+        counts.filled += applied.filled;
+        counts.shown += applied.shown;
+        const byId = new Map(answers.map((a) => [a.id, a]));
+        for (const q of batch) {
+          const a = byId.get(q.id);
+          const picked = (a?.option_ids || []).map((id) => q.options?.find((o) => o.id === id)?.text).filter(Boolean);
+          filled.push({ question: q.text, type: q.type, answer: a ? a.text || picked.join(", ") : "", filled: !!a && (q.type === "open" || picked.length > 0 || (q.type === "text" && !!a.text)) });
+        }
+        answered += batch.length;
+        await save({ step: answered });
+      }
+      if (filled.length) await appendToThread(tab, job, [compileFilled(filled)], meta, fillProgress(answered, questions.length));
+      const summary = summarise(counts, answered, questions.length);
+      if (state.cancelled) await save({ status: "cancelled", message: `Stopped after ${answered} of ${questions.length} questions.`, results: answered, summary });
+      else await save({ status: "done", message: `Done · ${summary}`, results: answered, summary, remaining: meta.remaining, plan: meta.plan });
+      return job;
+    }
+
+    const { parts, source } = await planLesson(tab, { screenshot: sendScreenshot, onProgress: (message) => save({ message }) });
+    await save({ total: parts.length, source });
     for (let i = 0; i < parts.length; i++) {
       if (state.cancelled) break;
       await save({ step: i + 1, message: `Solving part ${i + 1} of ${parts.length}…` });
       const data = await api("/v1/solve", {
-        device_id: deviceId,
-        license_key: license?.key || null,
+        ...auth,
         text: parts[i].text,
         image: parts[i].image,
         image_mime: "image/jpeg",
@@ -157,8 +282,9 @@ export async function runLesson(tab, { mode }) {
     if (state.cancelled) await save({ status: "cancelled", message: `Stopped after ${results.length} of ${job.total} parts.`, results: results.length });
     else await save({ status: "done", message: `Done · ${results.length} part${results.length > 1 ? "s" : ""} solved`, results: results.length, remaining: meta.remaining, plan: meta.plan });
   } catch (err) {
-    if (results.length) await appendToThread(tab, job, results, meta).catch(() => {});
-    await save({ status: "error", error: err.message || "Something went wrong", errorStatus: err.status || 0, results: results.length });
+    if (job.fill && filled.length) await appendToThread(tab, job, [compileFilled(filled)], meta, fillProgress(answered, job.total)).catch(() => {});
+    else if (!job.fill && results.length) await appendToThread(tab, job, results, meta).catch(() => {});
+    await save({ status: "error", error: err.message || "Something went wrong", errorStatus: err.status || 0, results: job.fill ? answered : results.length });
   } finally {
     clearInterval(keepAlive);
     active.delete(tab.id);
@@ -166,12 +292,22 @@ export async function runLesson(tab, { mode }) {
   return job;
 }
 
-async function appendToThread(tab, job, results, meta) {
+const fillProgress = (answered, total) => (answered < total ? `${answered} of ${total} questions` : null);
+
+function summarise(counts, answered, total) {
+  const bits = [];
+  if (counts.filled) bits.push(`${counts.filled} answer${counts.filled > 1 ? "s" : ""} filled in on the page`);
+  if (counts.shown) bits.push(`${counts.shown} shown next to the question`);
+  if (!bits.length) bits.push(`${answered} of ${total} questions answered`);
+  return bits.join(", ");
+}
+
+async function appendToThread(tab, job, results, meta, progress = null) {
   const stored = await chrome.storage.session.get(threadKey(tab.id));
   const thread = stored[threadKey(tab.id)] || { url: tab.url || "", messages: [] };
   if (thread.url && tab.url && thread.url.split("#")[0] !== tab.url.split("#")[0]) thread.messages = [];
   thread.url = tab.url || thread.url;
-  const partial = results.length < job.total ? ` (${results.length} of ${job.total} parts)` : "";
+  const partial = progress ? ` (${progress})` : results.length < job.total ? ` (${results.length} of ${job.total} parts)` : "";
   const remaining = meta.plan === "pro" || meta.remaining == null ? "" : ` · ${meta.remaining} free left today`;
   thread.messages.push(
     { role: "user", text: LESSON_PROMPT },

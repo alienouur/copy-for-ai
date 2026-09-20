@@ -55,7 +55,7 @@ Helps the user understand and answer the questions on the current web page: on u
 
 ## Permission justifications
 - activeTab: read the current page's content and capture a screenshot of the visible tab when the user clicks "Solve" or "Copy".
-- scripting: inject the extraction script into the active tab on user action.
+- scripting: inject the extraction script into the active tab on user action, and (Agent mode) the fill script that writes the answers into the page's answer fields and shows them next to each question. It never submits forms.
 - storage: save user preferences, templates, license key, a random device id for the free daily quota, and (Pro) local copy history.
 - contextMenus: provide "Solve with Copy for AI" / "Solve whole lesson (Agent)" / "Copy page for AI" / "Copy selection for AI" right-click items.
 - clipboardWrite: place the answer or the generated Markdown on the clipboard.

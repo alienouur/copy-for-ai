@@ -104,7 +104,7 @@ function renderJob(next) {
   $("job-count").textContent = job.total ? `${Math.min(job.step, job.total)}/${job.total}` : "";
   const fill = $("job-bar");
   fill.classList.toggle("indeterminate", running && !job.total);
-  const done = job.status === "done" ? job.total : Math.max(0, job.step - (running ? 1 : 0));
+  const done = job.status === "done" ? job.total : Math.max(0, job.step - (running && !job.fill ? 1 : 0));
   fill.style.width = job.total ? `${Math.round((done / job.total) * 100)}%` : running ? "" : "100%";
   const msg = $("job-msg");
   if (job.status === "error") {
