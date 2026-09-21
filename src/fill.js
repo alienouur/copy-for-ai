@@ -421,9 +421,14 @@ function clearField(el) {
   if (empty) return;
   selectAll(el);
   keyEvent(el, "keydown", "\b");
-  if (inputEvent(el, "beforeinput", null, "deleteContentBackward")) {
-    if (el.matches("input, textarea")) setNativeValue(el, "");
-    else if (!document.execCommand("delete")) el.textContent = "";
+  if (el.matches("input, textarea")) {
+    if (inputEvent(el, "beforeinput", null, "deleteContentBackward")) {
+      setNativeValue(el, "");
+      inputEvent(el, "input", null, "deleteContentBackward");
+    }
+  } else if (!document.execCommand("delete") && inputEvent(el, "beforeinput", null, "deleteContentBackward")) {
+    // execCommand fires beforeinput/input itself; only the manual fallback needs synthetic ones.
+    el.textContent = "";
     inputEvent(el, "input", null, "deleteContentBackward");
   }
   keyEvent(el, "keyup", "\b");
