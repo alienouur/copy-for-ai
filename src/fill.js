@@ -75,7 +75,7 @@ function labelText(el) {
     if (node.nodeType === Node.TEXT_NODE) text += node.textContent;
     else if (node.nodeType === Node.ELEMENT_NODE) {
       if (node.matches(CONTROL_SEL) || node.tagName === "BR") break;
-      text += node.innerText || "";
+      if (!node.matches("script, style, noscript, template")) text += node.innerText || "";
     }
     node = node.nextSibling;
   }
@@ -374,17 +374,107 @@ function setChecked(el, on) {
   else mark.classList.remove(PICKED_CLASS);
 }
 
-function typeInto(el, text) {
-  el.focus?.();
+const KEY_DELAY_MS = 12;
+
+function keyInfo(ch) {
+  if (ch === "\b") return { key: "Backspace", code: "Backspace", keyCode: 8 };
+  if (ch === "\n") return { key: "Enter", code: "Enter", keyCode: 13 };
+  if (ch === " ") return { key: " ", code: "Space", keyCode: 32 };
+  if (/^[a-z]$/i.test(ch)) return { key: ch, code: `Key${ch.toUpperCase()}`, keyCode: ch.toUpperCase().charCodeAt(0) };
+  if (/^\d$/.test(ch)) return { key: ch, code: `Digit${ch}`, keyCode: ch.charCodeAt(0) };
+  return { key: ch, code: "", keyCode: 0 };
+}
+
+function keyEvent(el, type, ch) {
+  const { key, code, keyCode } = keyInfo(ch);
+  return el.dispatchEvent(
+    new KeyboardEvent(type, { key, code, keyCode, which: keyCode, charCode: type === "keypress" ? ch.charCodeAt(0) : 0, bubbles: true, cancelable: true, composed: true }),
+  );
+}
+
+function inputEvent(el, type, data, inputType) {
+  return el.dispatchEvent(new InputEvent(type, { data, inputType, bubbles: true, cancelable: type === "beforeinput", composed: true }));
+}
+
+const isEditable = (el) => !el.matches("input, textarea") && el.isContentEditable;
+
+function selectAll(el, collapseToEnd = false) {
   if (el.matches("input, textarea")) {
-    if (el.type === "number") text = text.replace(",", ".").match(/-?\d+(\.\d+)?/)?.[0] ?? text;
-    setNativeValue(el, text);
-    if (el.type === "number" && el.value !== text) el.value = text;
-    fire(el, ["input", "change"]);
+    try {
+      el.setSelectionRange(0, el.value.length);
+    } catch {
+      /* number/email inputs have no selection API */
+    }
   } else {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    if (collapseToEnd) range.collapse(false);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+}
+
+/** Clears the field the way a user would: select everything, press Backspace. */
+function clearField(el) {
+  const empty = el.matches("input, textarea") ? !el.value : !clean(el.textContent);
+  if (empty) return;
+  selectAll(el);
+  keyEvent(el, "keydown", "\b");
+  if (inputEvent(el, "beforeinput", null, "deleteContentBackward")) {
+    if (el.matches("input, textarea")) setNativeValue(el, "");
+    else if (!document.execCommand("delete")) el.textContent = "";
+    inputEvent(el, "input", null, "deleteContentBackward");
+  }
+  keyEvent(el, "keyup", "\b");
+}
+
+/**
+ * Types `text` one character at a time with real keydown / keypress / beforeinput / input / keyup events,
+ * so fields that block paste (or validate keystrokes) accept the answer like manual typing.
+ */
+async function typeInto(el, text) {
+  if (el.matches("input") && el.type === "number") text = text.replace(",", ".").match(/-?\d+(\.\d+)?/)?.[0] ?? text;
+  const native = el.matches("input, textarea");
+  if (!native && !isEditable(el)) {
     el.textContent = text;
     fire(el, ["input"]);
+    return;
   }
+  el.focus?.();
+  clearField(el);
+  if (!native) selectAll(el, true);
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const newline = ch === "\n";
+    const inputType = newline ? (native ? "insertLineBreak" : "insertParagraph") : "insertText";
+    if (keyEvent(el, "keydown", ch) && keyEvent(el, "keypress", ch)) {
+      if (native) {
+        if (inputEvent(el, "beforeinput", newline ? null : ch, inputType)) {
+          const next = text.slice(0, i + 1);
+          setNativeValue(el, next);
+          if (el.type === "number" && el.value !== next) el.value = next;
+          inputEvent(el, "input", newline ? null : ch, inputType);
+        }
+      } else if (!document.execCommand(newline ? "insertParagraph" : "insertText", false, ch)) {
+        // execCommand fires beforeinput/input itself; only synthesise them on the manual fallback
+        if (inputEvent(el, "beforeinput", newline ? null : ch, inputType)) {
+          el.append(newline ? document.createElement("br") : ch);
+          selectAll(el, true);
+          inputEvent(el, "input", newline ? null : ch, inputType);
+        }
+      }
+    }
+    keyEvent(el, "keyup", ch);
+    if (i % 3 === 2) await sleep(KEY_DELAY_MS);
+  }
+  const got = native ? el.value : clean(el.innerText);
+  if (native ? got !== text : !got.includes(clean(text))) {
+    if (native) setNativeValue(el, text);
+    else el.textContent = text;
+    fire(el, ["input"]);
+  }
+  fire(el, ["change"]);
   el.blur?.();
 }
 
@@ -493,7 +583,7 @@ export async function apply(answers, questions) {
     } else if (q.type === "text") {
       const el = byAttr(O_ATTR, `${q.id}-0`);
       if (el && text) {
-        typeInto(el, text);
+        await typeInto(el, text);
         done = true;
       }
     } else if (q.type === "match") {

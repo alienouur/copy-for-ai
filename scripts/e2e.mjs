@@ -26,13 +26,23 @@ const quizHtml = `<!doctype html><html><head><title>Maths Quiz 1</title></head><
 <div class="question"><p>2. Which of these numbers are prime? (tick all that apply)</p>
 <ul><li><label><input type="checkbox" name="p2"> 2</label></li><li><label><input type="checkbox" name="p3"> 3</label></li><li><label><input type="checkbox" name="p4" checked> 4</label></li></ul></div>
 <p>3. The capital of France is <select name="q3"><option value="">Choose…</option><option value="rome">Rome</option><option value="paris">Paris</option></select></p>
-<p>4. Solve x + 1 = 3. Then x = <input type="text" name="q4"></p>
-<p>5. Explain briefly why the sky is blue.</p><textarea name="q5" rows="3"></textarea>
+<p>4. Solve x + 1 = 3. Then x = <input type="text" name="q4" onpaste="event.preventDefault()"></p>
+<p>5. Explain briefly why the sky is blue.</p><textarea name="q5" rows="3" onpaste="event.preventDefault()"></textarea>
 <p><label><input type="checkbox" name="agree"> I agree to the terms</label></p>
 <button type="submit">Submit</button>
 </form>
 <script>document.getElementById("quiz").addEventListener("submit", (e) => { e.preventDefault(); window.__submitted = (window.__submitted || 0) + 1; });
-window.__changes = []; document.addEventListener("change", (e) => window.__changes.push(e.target.name));</script>
+window.__changes = []; document.addEventListener("change", (e) => window.__changes.push(e.target.name));
+// Anti-paste field: the page keeps its own model built from single-character keystrokes and reverts anything else
+// (pasted text, programmatic value changes), like typing-only quiz platforms do.
+window.__typed = ""; window.__keys = [];
+const q4 = document.querySelector("input[name=q4]");
+q4.addEventListener("keydown", (e) => window.__keys.push(e.key));
+q4.addEventListener("input", (e) => {
+  if (e.inputType === "insertText" && e.data && e.data.length === 1 && e.target.value === window.__typed + e.data) window.__typed += e.data;
+  else if (e.inputType === "deleteContentBackward") window.__typed = "";
+  else e.target.value = window.__typed;
+});</script>
 </body></html>`;
 // Worksheet without any fields: answers are shown next to each numbered question.
 const worksheetHtml = `<!doctype html><html><head><title>Worksheet</title></head><body><article><h1>Fractions worksheet</h1>
@@ -140,6 +150,12 @@ writeFileSync(`${dist}/manifest.json`, JSON.stringify(manifest));
 const bg = readFileSync(`${dist}/background.js`, "utf8");
 if (!bg.includes("https://copyforai-license.onrender.com")) throw new Error("license API url not found in background bundle");
 writeFileSync(`${dist}/background.js`, bg.replaceAll("https://copyforai-license.onrender.com", mockUrl));
+
+// Screenshots are documentation, not assertions: a background tab can stall the capture in headed Chrome.
+async function shot(page, file, fullPage = false) {
+  await page.bringToFront().catch(() => {});
+  await page.screenshot({ path: file, fullPage, timeout: 15000 }).catch((e) => console.warn(`screenshot ${file} skipped: ${e.message.split("\n")[0]}`));
+}
 
 const profile = mkdtempSync(path.join(tmpdir(), "cfa-profile-"));
 const ctx = await chromium.launchPersistentContext(profile, {
@@ -265,7 +281,7 @@ req = solveCalls.at(-1);
 if (req.mode !== "explain" || req.history.length !== 4 || !/step by step/.test(req.question)) throw new Error("explain request wrong");
 if ((await lastAnswer().locator("ol li").count()) !== 2) throw new Error("markdown list not rendered");
 if (!(await popup.locator(".msg.model .explain").last().isHidden())) throw new Error("explain button should hide on explain answers");
-await popup.screenshot({ path: "release/screenshot-sidepanel.png" });
+await shot(popup, "release/screenshot-sidepanel.png");
 
 // Thread survives a panel reload and a page refresh, resets on navigation to another page
 await popup.reload();
@@ -329,7 +345,7 @@ if ((await panel2.locator(".msg.user .bubble").first().textContent()) !== "Solve
 const notes = await sw.evaluate(() => globalThis.__notes);
 console.log("notifications:", notes.map((n) => `${n.id}: ${n.title} – ${n.message}`));
 if (notes.length !== 1 || !/Lesson solved/.test(notes[0].title) || !notes[0].message.includes(`${total} parts`) || notes[0].silent !== false) throw new Error("completion notification wrong");
-await panel2.screenshot({ path: "release/screenshot-agent.png" });
+await shot(panel2, "release/screenshot-agent.png");
 // Notification click re-opens the panel for that tab (sidePanel.open needs a gesture, so it may throw; the fallback must not create a tab).
 await sw.evaluate(async (id) => {
   globalThis.__opened = [];
@@ -406,6 +422,8 @@ const filledState = await article.evaluate(() => ({
   agree: document.querySelector("input[name=agree]").checked,
   q3: document.querySelector("select[name=q3]").value,
   q4: document.querySelector("input[name=q4]").value,
+  q4typed: window.__typed,
+  q4keys: window.__keys,
   q5: document.querySelector("textarea[name=q5]").value,
   badges: [...document.querySelectorAll(".cfa-answer")].map((b) => b.textContent),
   picked: document.querySelectorAll(".cfa-picked").length,
@@ -416,6 +434,7 @@ const filledState = await article.evaluate(() => ({
 console.log("page state after agent:", filledState);
 if (filledState.q1 !== "b" || !filledState.p2 || !filledState.p3 || filledState.p4 || filledState.agree) throw new Error("choices not filled correctly");
 if (filledState.q3 !== "paris" || filledState.q4 !== "2" || !/Rayleigh/.test(filledState.q5)) throw new Error("select / text fields not filled");
+if (filledState.q4typed !== "2" || filledState.q4keys.join() !== "2") throw new Error("anti-paste field must be typed key by key: " + JSON.stringify([filledState.q4typed, filledState.q4keys]));
 if (filledState.badges.length !== 5 || !filledState.badges.some((b) => b.includes("42")) || filledState.picked < 4) throw new Error("answer badges missing");
 if (filledState.submitted !== 0 || filledState.url !== "/quiz.html") throw new Error("the agent must not submit the form");
 if (!["q1", "p2", "p4", "q3", "q4", "q5"].every((n) => filledState.changes.includes(n))) throw new Error("change events should fire for frameworks: " + filledState.changes);
@@ -426,7 +445,7 @@ const quizMeta = await popup.locator(".msg.model .meta").last().textContent();
 if (!/Agent · 5 questions on the page/.test(quizMeta) || /parts\)/.test(quizMeta)) throw new Error("quiz meta wrong: " + quizMeta);
 const quizNotes = await sw.evaluate(() => globalThis.__notes);
 if (quizNotes.length !== 1 || !/5 answers filled in/.test(quizNotes[0].message) || !/Review it, then submit/.test(quizNotes[0].message)) throw new Error("quiz notification wrong: " + JSON.stringify(quizNotes));
-await article.screenshot({ path: "release/screenshot-quiz-filled.png" });
+await shot(article, "release/screenshot-quiz-filled.png");
 
 // Worksheet without fields: answers appear beside each question.
 lessonCalls.length = 0;
@@ -499,7 +518,7 @@ const dndState = await article.evaluate(() => ({
 console.log("drag-drop state:", dndState, "-", await popup.textContent("#job-msg"));
 if (dndState.france !== "Paris" || dndState.italy !== "Rome" || dndState.loose.join() !== "Berlin" || dndState.picked !== 2) throw new Error("drag-and-drop answers not placed");
 if (dndState.url !== "/course/2.html" || lessonCalls.length !== 1) throw new Error("without a Next / Submit button the agent should stop on the page");
-await article.screenshot({ path: "release/screenshot-dragdrop.png" });
+await shot(article, "release/screenshot-dragdrop.png");
 await popup.click("#job-dismiss");
 await popup.click("#new-chat");
 await article.goto("https://en.wikipedia.org/wiki/Markdown?e2e=nav2", { waitUntil: "domcontentloaded" });
@@ -514,7 +533,7 @@ console.log("copy status:", await popup.textContent("#copy-status"));
 const clip = await popup.evaluate(() => navigator.clipboard.readText());
 console.log("clipboard starts with:", JSON.stringify(clip.slice(0, 120)));
 if (!clip.startsWith("Summarize the following page") || !clip.includes("# Markdown")) throw new Error("clipboard content wrong");
-await popup.screenshot({ path: "release/screenshot-copytools.png" });
+await shot(popup, "release/screenshot-copytools.png");
 
 // selection with nothing selected -> friendly error
 await popup.click("#copy-selection");
@@ -545,7 +564,7 @@ async function tryKey(key) {
   return cls.includes("ok");
 }
 if (await tryKey("not-a-real-key")) throw new Error("garbage key accepted");
-await options.screenshot({ path: "release/screenshot-options.png", fullPage: true });
+await shot(options, "release/screenshot-options.png", true);
 if (process.env.TEST_LICENSE_KEY) {
   const real = process.env.TEST_LICENSE_KEY.trim();
   const tampered = real.replace(/\.([^.]+)$/, (m, sig) => "." + (sig[0] === "A" ? "B" : "A") + sig.slice(1));
