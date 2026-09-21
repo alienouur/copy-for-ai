@@ -37,29 +37,75 @@ window.__changes = []; document.addEventListener("change", (e) => window.__chang
 // Worksheet without any fields: answers are shown next to each numbered question.
 const worksheetHtml = `<!doctype html><html><head><title>Worksheet</title></head><body><article><h1>Fractions worksheet</h1>
 <p>Answer the following.</p><ol><li>What is 1/2 + 1/4?</li><li>Simplify 6/8.</li><li>Is 3/5 bigger than 1/2?</li></ol></article></body></html>`;
+// Three-step course: real navigation (Next), drag-and-drop matching + Check that reveals Next, an SPA step swap, a form
+// Submit that navigates to a results page. Every click is logged in localStorage so the test can see the exact sequence.
+const courseHead = `<!doctype html><html><head><title>Geography course</title><meta charset="utf-8"><style>.dropzone{display:inline-block;min-width:120px;min-height:32px;border:1px dashed #888;vertical-align:middle}[draggable]{display:inline-block;padding:4px 8px;border:1px solid #333;margin:4px;cursor:grab}</style></head><body>
+<script>window.log = (e) => localStorage.setItem("__log", (localStorage.getItem("__log") || "") + e + ";");</script>
+<nav><a href="/course/1.html">Course home</a><button onclick="log('nav-menu')">Menu</button></nav>`;
+const coursePages = {
+  "/course/1.html": `${courseHead}<h1>Step 1 of 3</h1><form id="f1">
+<fieldset><legend>1. What is 6 × 7?</legend><label><input type="radio" name="q1" value="a"> 40</label><label><input type="radio" name="q1" value="b"> 42</label><label><input type="radio" name="q1" value="c"> 48</label></fieldset>
+<button type="button" onclick="log('back')">Back</button> <button type="button" id="next">Next</button></form>
+<script>document.getElementById("next").onclick = () => { log("next1:" + (document.querySelector("input[name=q1]:checked")?.value || "none")); location.href = "/course/2.html"; };</script></body></html>`,
+  "/course/2.html": `${courseHead}<h1>Step 2 of 3</h1><main id="step">
+<section id="match"><h2>2. Drag each capital onto its country</h2>
+<div class="items"><span draggable="true" id="i-paris">Paris</span><span draggable="true" id="i-rome">Rome</span><span draggable="true" id="i-berlin">Berlin</span></div>
+<table><tr><td>France</td><td><span class="dropzone" data-accept="i-paris"></span></td></tr><tr><td>Italy</td><td><span class="dropzone" data-accept="i-rome"></span></td></tr></table>
+<button type="button" id="check">Check</button> <button type="button" id="next2" hidden>Next</button><p id="feedback"></p></section></main>
+<script>
+for (const d of document.querySelectorAll("[draggable]")) d.addEventListener("dragstart", (e) => { e.dataTransfer.setData("text", d.id); log("dragstart:" + d.id); });
+for (const z of document.querySelectorAll(".dropzone")) {
+  z.addEventListener("dragover", (e) => e.preventDefault());
+  z.addEventListener("drop", (e) => { e.preventDefault(); const el = document.getElementById(e.dataTransfer.getData("text")); if (el) { z.replaceChildren(el); log("drop:" + el.id + ">" + z.dataset.accept); } });
+}
+document.getElementById("check").onclick = () => {
+  const ok = [...document.querySelectorAll(".dropzone")].filter((z) => z.firstElementChild?.id === z.dataset.accept).length;
+  document.getElementById("feedback").textContent = ok + " of 2 correct";
+  log("check:" + ok);
+  document.getElementById("next2").hidden = false;
+};
+document.getElementById("next2").onclick = () => {
+  log("next2");
+  document.getElementById("step").innerHTML = '<form action="/course/done.html" method="get"><p>3. Solve x + 1 = 3. Then x = <input type="text" name="q3"></p><button type="button" onclick="log(&quot;reset&quot;)">Reset</button> <button type="submit">Submit</button></form>';
+  document.querySelector("#step form").addEventListener("submit", () => log("submit:" + document.querySelector("input[name=q3]").value));
+};
+</script></body></html>`,
+  "/course/done.html": `${courseHead}<h1>Results</h1><p>You have completed the course. Score: 3 / 3.</p>
+<button type="button" onclick="log('review')">Review answers</button> <button type="button" onclick="log('again')">Try again</button> <a href="/course/1.html" class="btn" onclick="log('back-course')">Back to course</a></body></html>`,
+};
 const ANSWER_KEY = { "40": false, "42": true, "2": true, "3": true, "4": false, "Paris": true, "Rome": false };
+const MATCH_KEY = { France: "Paris", Italy: "Rome" };
 function fillAnswers(text) {
   const answers = [];
   let current = null;
+  let type = "";
   for (const line of text.split("\n")) {
     const q = line.match(/^Q (\S+) \[(\w+)\]: (.*)$/);
     if (q) {
-      current = { id: q[1], option_ids: [], text: /x \+ 1/.test(q[3]) ? "2" : /sky/.test(q[3]) ? "Rayleigh scattering of sunlight" : `Answer for ${q[1]}` };
+      type = q[2];
+      current = { id: q[1], option_ids: [], pairs: [], options: {}, text: /x \+ 1/.test(q[3]) ? "2" : /sky/.test(q[3]) ? "Rayleigh scattering of sunlight" : `Answer for ${q[1]}` };
       answers.push(current);
       continue;
     }
     const o = line.match(/^- (\S+): (.*)$/);
-    if (o && current && ANSWER_KEY[o[2].trim()]) {
+    if (o && current) current.options[o[2].trim()] = o[1];
+    if (o && current && type !== "match" && ANSWER_KEY[o[2].trim()]) {
       current.option_ids.push(o[1]);
       current.text = o[2].trim();
     }
+    const t = line.match(/^> (\S+): (.*)$/);
+    if (t && current && MATCH_KEY[t[2].trim()] && current.options[MATCH_KEY[t[2].trim()]]) {
+      current.pairs.push({ option_id: current.options[MATCH_KEY[t[2].trim()]], target_id: t[1] });
+      current.text = current.pairs.length === 1 ? `${MATCH_KEY[t[2].trim()]} → ${t[2].trim()}` : `${current.text}; ${MATCH_KEY[t[2].trim()]} → ${t[2].trim()}`;
+    }
   }
-  return answers;
+  return answers.map(({ options, ...a }) => a);
 }
 const mock = createServer((req, res) => {
   if (req.method === "GET") {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-    return res.end(req.url.startsWith("/quiz") ? quizHtml : req.url.startsWith("/worksheet") ? worksheetHtml : lessonHtml);
+    const pathname = req.url.split("?")[0];
+    return res.end(coursePages[pathname] || (pathname.startsWith("/quiz") ? quizHtml : pathname.startsWith("/worksheet") ? worksheetHtml : lessonHtml));
   }
   let raw = "";
   req.on("data", (c) => (raw += c));
@@ -331,10 +377,13 @@ await popup.waitForSelector("#job.error", { timeout: 10000 });
 await popup.click("#job-dismiss");
 await popup.click("#new-chat");
 
-// 2f) Quiz page: the agent answers in place - radios / checkboxes / select / text / textarea - on the same tab, no submit.
+// 2f) Quiz page: the agent answers in place - radios / checkboxes / select / text / textarea - on the same tab. With
+// "Auto-submit & next" off it must leave the Submit button alone.
 lessonFailAt = 0;
 lessonCalls.length = 0;
 await sw.evaluate(() => (globalThis.__notes = []));
+if (!(await popup.isChecked("#autoSubmit"))) throw new Error("auto-submit should be on by default");
+await popup.uncheck("#autoSubmit");
 await article.goto(`${mockUrl}/quiz.html`, { waitUntil: "domcontentloaded" });
 await popup.waitForFunction(() => /Maths Quiz/.test(document.getElementById("page-title").textContent));
 await popup.click("#lesson-btn");
@@ -395,6 +444,62 @@ const wsBadges = await article.evaluate(() => [...document.querySelectorAll("li 
 console.log("worksheet badges:", wsBadges);
 if (wsBadges.length !== 3 || !wsBadges.every((b) => /Answer for q\d/.test(b))) throw new Error("worksheet answers should be shown inline");
 if (!/3 shown next to the question/.test(await popup.textContent("#job-msg"))) throw new Error("worksheet summary wrong");
+await popup.click("#job-dismiss");
+await popup.click("#new-chat");
+
+// 2g) Multi-step course with auto-submit: fill -> Next (navigation) -> drag-and-drop matching -> Check -> Next (SPA swap)
+// -> text answer -> Submit (navigation to results) -> stop. Same tab throughout; Back / Reset / Review / Try again untouched.
+lessonCalls.length = 0;
+await sw.evaluate(() => (globalThis.__notes = []));
+await popup.check("#autoSubmit");
+if ((await sw.evaluate(async () => (await chrome.storage.sync.get("settings")).settings.autoSubmit)) !== true) throw new Error("auto-submit toggle should persist in settings");
+const tabsBefore = ctx.pages().length;
+await article.goto(`${mockUrl}/course/1.html`, { waitUntil: "domcontentloaded" });
+await article.evaluate(() => localStorage.removeItem("__log"));
+await popup.waitForFunction(() => /Geography course/.test(document.getElementById("page-title").textContent));
+await popup.click("#lesson-btn");
+await popup.waitForFunction(() => /Clicked|waiting for the next page/.test(document.getElementById("job-msg").textContent), null, { timeout: 30000, polling: 50 });
+console.log("course progress:", await popup.textContent("#job-msg"));
+await popup.waitForSelector("#job.done", { timeout: 60000 });
+console.log("course job:", await popup.textContent("#job-count"), "-", await popup.textContent("#job-msg"));
+const courseLog = await article.evaluate(() => localStorage.getItem("__log"));
+console.log("course click log:", courseLog, "- final url:", article.url());
+if (ctx.pages().length !== tabsBefore) throw new Error("the agent must stay on the same tab");
+if (!article.url().endsWith("/course/done.html?q3=2")) throw new Error("course should end on the results page with the typed answer submitted");
+const courseSteps = courseLog.split(";").filter(Boolean).filter((s) => !s.startsWith("dragstart"));
+if (courseSteps.join() !== "next1:b,drop:i-paris>i-paris,drop:i-rome>i-rome,check:2,next2,submit:2") throw new Error("course click sequence wrong: " + courseSteps.join());
+if (lessonCalls.length !== 3 || lessonCalls.some((c) => c.mode !== "fill")) throw new Error(`course should take 3 fill requests, got ${lessonCalls.length}`);
+console.log("match request:\n" + lessonCalls[1].text);
+if (!/^Q \S+ \[match\]: 2\. Drag each capital/m.test(lessonCalls[1].text) || !/^- \S+: Berlin$/m.test(lessonCalls[1].text) || !/^> \S+: France$/m.test(lessonCalls[1].text) || !/^> \S+: Italy$/m.test(lessonCalls[1].text)) throw new Error("match question should list draggable items and drop targets");
+if (!/page 2 of the lesson/.test(lessonCalls[1].question) || !/^Q \S+ \[text\]: 3\. Solve x \+ 1 = 3/m.test(lessonCalls[2].text)) throw new Error("later pages should be scanned after the click");
+if (!/3 answers filled in on the page \(3 pages\)/.test(await popup.textContent("#job-msg")) || !/submitted via “Submit”/.test(await popup.textContent("#job-msg"))) throw new Error("course summary wrong: " + (await popup.textContent("#job-msg")));
+const courseAnswer = await popup.locator(".msg.model .bubble").last().textContent();
+if (!/→ 42/.test(courseAnswer) || !/Paris → France; Rome → Italy/.test(courseAnswer) || !/→ 2/.test(courseAnswer)) throw new Error("course answers not listed in the thread: " + courseAnswer);
+if (!/Agent · 3 questions on the page \(3 pages\)/.test(await popup.locator(".msg.model .meta").last().textContent())) throw new Error("course meta wrong");
+const courseNotes = await sw.evaluate(() => globalThis.__notes);
+if (courseNotes.length !== 1 || !/Check the results/.test(courseNotes[0].message)) throw new Error("course notification wrong: " + JSON.stringify(courseNotes));
+
+// Drag-and-drop on its own page (no Next / Submit anywhere): the items land in their boxes and the job ends on that page.
+lessonCalls.length = 0;
+await popup.click("#job-dismiss");
+await popup.click("#new-chat");
+await article.goto(`${mockUrl}/course/2.html`, { waitUntil: "domcontentloaded" });
+await article.evaluate(() => { localStorage.removeItem("__log"); document.getElementById("check").remove(); });
+await popup.waitForFunction(() => /Geography course/.test(document.getElementById("page-title").textContent));
+await popup.click("#lesson-btn");
+await popup.waitForSelector("#job.done", { timeout: 30000 });
+const dndState = await article.evaluate(() => ({
+  france: document.querySelector("[data-accept=i-paris]").textContent,
+  italy: document.querySelector("[data-accept=i-rome]").textContent,
+  loose: [...document.querySelectorAll(".items [draggable]")].map((d) => d.textContent),
+  picked: document.querySelectorAll(".cfa-picked").length,
+  log: localStorage.getItem("__log"),
+  url: location.pathname,
+}));
+console.log("drag-drop state:", dndState, "-", await popup.textContent("#job-msg"));
+if (dndState.france !== "Paris" || dndState.italy !== "Rome" || dndState.loose.join() !== "Berlin" || dndState.picked !== 2) throw new Error("drag-and-drop answers not placed");
+if (dndState.url !== "/course/2.html" || lessonCalls.length !== 1) throw new Error("without a Next / Submit button the agent should stop on the page");
+await article.screenshot({ path: "release/screenshot-dragdrop.png" });
 await popup.click("#job-dismiss");
 await popup.click("#new-chat");
 await article.goto("https://en.wikipedia.org/wiki/Markdown?e2e=nav2", { waitUntil: "domcontentloaded" });

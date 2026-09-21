@@ -52,7 +52,7 @@ async function openSolver(tab) {
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg?.type === "cfa-lesson-start") {
-    startLesson(msg.tab, msg.mode);
+    startLesson(msg.tab, msg.mode, msg.autoSubmit);
     sendResponse({ ok: true });
   }
   if (msg?.type === "cfa-lesson-cancel") {
@@ -64,18 +64,18 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 });
 
-async function startLesson(tab, mode) {
+async function startLesson(tab, mode, autoSubmit) {
   if (!tab?.id || isLessonRunning(tab.id)) return;
   if (!mode) {
     const { settings } = await chrome.storage.sync.get("settings");
     mode = settings?.answerOnly === false ? "explain" : "answer";
   }
-  const job = await runLesson(tab, { mode });
+  const job = await runLesson(tab, { mode, autoSubmit });
   const title = (job.title || "this page").slice(0, 60);
   const unit = job.fill ? "question" : "part";
   if (job.status === "done") {
     const what = job.summary || `${job.results} ${unit}${job.results > 1 ? "s" : ""} answered`;
-    notify("Lesson solved ✓", `${what} on “${title}”. Review it, then submit.`, `${NOTIFY_LESSON}${tab.id}`, false);
+    notify("Lesson solved ✓", `${what} on “${title}”. ${job.submitted ? "Check the results." : "Review it, then submit."}`, `${NOTIFY_LESSON}${tab.id}`, false);
   } else if (job.status === "error") {
     notify("Lesson agent stopped", `${job.error}${job.results ? ` (${job.results} of ${job.total} ${unit}s done)` : ""}`, `${NOTIFY_LESSON}${tab.id}`, false);
   }

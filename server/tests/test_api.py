@@ -269,13 +269,30 @@ async def test_solve_follow_up_history(client, solve_env, monkeypatch):
 @pytest.mark.anyio
 async def test_solve_fill_structured(client, solve_env, monkeypatch):
     calls = []
-    raw = json.dumps({"answers": [{"id": "q1", "option_ids": ["q1-1"], "text": "42"}, {"id": "q2", "text": "x = 2"}, "junk"]})
+    raw = json.dumps(
+        {
+            "answers": [
+                {"id": "q1", "option_ids": ["q1-1"], "text": "42"},
+                {"id": "q2", "text": "x = 2"},
+                {
+                    "id": "q3",
+                    "text": "Paris → France",
+                    "pairs": [{"option_id": "q3-0", "target_id": "q3-t0"}, {"option_id": "q3-1"}, "junk"],
+                },
+                "junk",
+            ]
+        }
+    )
     monkeypatch.setattr(main, "_gemini", make_gemini(answer=raw, calls=calls))
-    text = "Q q1 [choice]: 6*7?\n- q1-0: 40\n- q1-1: 42\nQ q2 [text]: Solve x+1=3"
+    text = "Q q1 [choice]: 6*7?\n- q1-0: 40\n- q1-1: 42\nQ q2 [text]: Solve x+1=3\nQ q3 [match]: Capitals\n- q3-0: Paris\n- q3-1: Rome\n> q3-t0: France"
     r = await client.post("/v1/solve", json={**DEVICE, "text": text, "mode": "fill", "stream": True})
     assert r.status_code == 200
     assert r.json() == {
-        "answers": [{"id": "q1", "option_ids": ["q1-1"], "text": "42"}, {"id": "q2", "option_ids": [], "text": "x = 2"}],
+        "answers": [
+            {"id": "q1", "option_ids": ["q1-1"], "text": "42", "pairs": []},
+            {"id": "q2", "option_ids": [], "text": "x = 2", "pairs": []},
+            {"id": "q3", "option_ids": [], "text": "Paris → France", "pairs": [{"option_id": "q3-0", "target_id": "q3-t0"}]},
+        ],
         "plan": "free",
         "remaining": 1,
         "model": main.GEMINI_MODEL,
@@ -284,6 +301,7 @@ async def test_solve_fill_structured(client, solve_env, monkeypatch):
     assert calls[0].url.path.endswith(":generateContent")
     assert sent["generationConfig"]["responseMimeType"] == "application/json"
     assert sent["generationConfig"]["responseSchema"]["required"] == ["answers"]
+    assert "pairs" in sent["generationConfig"]["responseSchema"]["properties"]["answers"]["items"]["properties"]
     assert "return JSON only" in sent["contents"][0]["parts"][-1]["text"]
 
     monkeypatch.setattr(main, "_gemini", make_gemini(answer="not json"))

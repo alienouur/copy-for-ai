@@ -28,7 +28,7 @@
         <h2>Stuck on a question?</h2>
         <p>I read the page (or take a screenshot when it can't be read) and give you the answers. Select text first to solve only that part.</p>
         <button id="solve-btn" class="primary big">Solve this page</button>
-        <button id="lesson-btn" class="secondary big" title="Reads the whole lesson, solves every exercise in the background and notifies you when it's done">Solve whole lesson (Agent)</button>
+        <button id="lesson-btn" class="secondary big" title="Fills in every question on the page in the background, clicks Next / Submit, keeps going to the last question and notifies you when it's done">Solve whole lesson (Agent)</button>
         <p class="hint-line">Then ask follow-ups like “why?” or “explain #3” below. <kbd id="shortcut-hint">Alt+Shift+S</kbd> solves from anywhere.</p>
       </section>
       <div id="messages"></div>
@@ -60,6 +60,7 @@
       <div class="toggles">
         <label title="Show just the final answers, no explanation"><input type="checkbox" id="answerOnly" /> Answer only</label>
         <label title="Also send a screenshot of the visible page so images, diagrams and PDFs are understood"><input type="checkbox" id="sendScreenshot" /> Screenshot</label>
+        <label title="Agent: after filling in a page, click its Next / Submit / Check button and keep solving until the last question. Turn off to review the answers yourself before submitting."><input type="checkbox" id="autoSubmit" /> Auto-submit &amp; next</label>
         <span id="quota" class="quota"></span>
       </div>
 

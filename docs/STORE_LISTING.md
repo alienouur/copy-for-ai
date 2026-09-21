@@ -35,6 +35,7 @@ FEATURES
 ✓ "Explain" mode: step-by-step reasoning when you need to learn the method
 ✓ Screenshot understanding for PDFs, images and diagrams
 ✓ Answers in the same language as the question
+✓ Agent: fills in a whole lesson for you – multiple choice, text fields, matching and drag-and-drop – then clicks Next / Check / Submit and keeps going to the last question (turn off "Auto-submit & next" to review before submitting)
 ✓ Copy the answer with one click
 ✓ Powered by Google Gemini – no API key or account needed
 ✓ Bonus: copy any page, selection or all tabs as clean Markdown for ChatGPT / Claude (token counter + prompt templates)
@@ -57,7 +58,7 @@ Helps the user understand and answer the questions on the current web page: on u
 
 ## Permission justifications
 - activeTab: read the current page's content and capture a screenshot of the visible tab when the user clicks "Solve" or "Copy".
-- scripting: inject the extraction script into the active tab on user action, and (Agent mode) the fill script that writes the answers into the page's answer fields and shows them next to each question. It never submits forms.
+- scripting: inject the extraction script into the active tab on user action, and (Agent mode) the fill script that writes the answers into the page's answer fields (choices, text, matching, drag-and-drop) and shows them next to each question. With the user's "Auto-submit & next" option on, it also clicks the page's own Next / Check / Submit button to move on to the next question; with it off it never submits.
 - storage: save user preferences, templates, license key, a random device id for the free daily quota, and (Pro) local copy history.
 - contextMenus: provide "Solve with Copy for AI" / "Solve whole lesson (Agent)" / "Copy page for AI" / "Copy selection for AI" right-click items.
 - clipboardWrite: place the answer or the generated Markdown on the clipboard.

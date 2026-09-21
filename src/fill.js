@@ -1,8 +1,11 @@
 // Injected into the lesson tab by the agent. scan() finds every question on the page together with the form control
-// that answers it and tags them with data-cfa-* ids; apply() then selects / types the model's answers into those
-// controls and shows each answer beside its question. Nothing is ever submitted.
+// that answers it (including drag-and-drop matching: draggable items + drop targets) and tags them with data-cfa-*
+// ids; apply() then selects / types / drags the model's answers into those controls and shows each answer beside its
+// question. apply() never submits; advance() is the separate, opt-in step that clicks the page's Next / Submit button.
 const Q_ATTR = "data-cfa-q";
 const O_ATTR = "data-cfa-o";
+const T_ATTR = "data-cfa-t";
+const CLICKED_ATTR = "data-cfa-clicked";
 const BADGE_CLASS = "cfa-answer";
 const PICKED_CLASS = "cfa-picked";
 const STYLE_ID = "cfa-answer-style";
@@ -15,6 +18,12 @@ const TEXT_TYPES = new Set(["", "text", "number", "search", "tel", "url", "email
 const OPEN_QUESTION = /^\s*((\d{1,3}|[a-zA-Z]|[ivxIVX]{1,5})\s*[.)\]:\-–]\s+\S|(Question|Exercise|Exercice|Problem|Task|Q)\s*\d)/;
 const CONTROL_SEL = "input, select, textarea, [role=radio], [role=checkbox], [contenteditable=true]";
 const GROUP_SEL = "[role=radiogroup], [role=group], fieldset, ul, ol, table";
+const DRAG_SEL = "[draggable=true], [aria-grabbed], .draggable, .drag-item, .dragitem, [data-draggable], [data-drag]";
+const DROP_SEL = "[dropzone], [aria-dropeffect], [ondrop], [data-drop], [data-dropzone], [data-droppable], [data-target], [data-accept], .dropzone, .drop-zone, .droppable, .drop-target, .drop-area, .droparea, .dropbox, .drop, .place, .slot, .gap, .blank, .bucket, .answer-box, .answer-slot, .target";
+const NEXT_BTN = /\b(next|continue|proceed|go on|nächste|weiter|suivant|siguiente|avanti|próxim[oa]|далее|التالي|متابعة|استمر(ار)?)\b|^[›»→>]+$/i;
+const SUBMIT_BTN = /\b(submit|check( (my )?answers?)?|finish|done|save|send|complete|grade|verify|confirm|ok|absenden|prüfen|überprüfen|senden|fertig|valider|envoyer|terminer|vérifier|enviar|comprobar|finalizar|إرسال|أرسل|تحقق|إنهاء|تسليم|حفظ|تأكيد|موافق)\b/i;
+const NOT_BTN = /\b(cancel|previous|prev|back|skip|log ?out|sign ?out|exit|quit|delete|remove|clear|reset|search|close|menu|help|hint|show answer|review|retry|try again|إلغاء|السابق|رجوع|حذف|إعادة|بحث|إغلاق)\b/i;
+const DIALOG_SEL = "dialog[open], [role=dialog], [role=alertdialog], .modal.show, .modal.in, .modal[style*='display: block']";
 const INLINE_TAGS = new Set(["SPAN", "B", "STRONG", "EM", "I", "U", "A", "CODE", "SUB", "SUP", "SMALL", "MARK", "BR", "IMG", "LABEL", "FONT", "MATH"]);
 
 const clean = (s) => (s || "").replace(/\s+/g, " ").trim();
@@ -152,12 +161,75 @@ function directText(el) {
   return clean(text);
 }
 
-/** Scans the page. Returns {title, questions: [{id, type, text, options?: [{id, text}]}]}. */
+/**
+ * Own label of a drop target: aria-label / data-* / its text (minus dropped items) / the row or list item it sits in.
+ * Returns {text, host}, host being the element the label was read from (excluded from the question text).
+ */
+function targetLabel(t, drags) {
+  for (const attr of ["aria-label", "data-label", "data-title", "data-name", "title", "placeholder", "data-placeholder"]) {
+    const v = clean(t.getAttribute(attr));
+    if (v) return { text: v, host: t };
+  }
+  const own = textExcluding(t, drags);
+  if (own) return { text: own.slice(0, MAX_OPTION_CHARS), host: t };
+  const row = t.closest("tr, li, dt, dd, .row, [class*=row], [class*=pair], [class*=item], p");
+  if (row && row.querySelectorAll(DROP_SEL).length === 1) {
+    const txt = textExcluding(row, [t, ...drags]);
+    if (txt) return { text: txt.slice(0, MAX_OPTION_CHARS), host: row };
+  }
+  const prev = t.previousElementSibling || t.parentElement?.previousElementSibling;
+  if (prev && !prev.matches(DROP_SEL) && !prev.matches(DRAG_SEL)) {
+    const txt = textExcluding(prev, drags);
+    if (txt && txt.length <= MAX_OPTION_CHARS) return { text: txt, host: prev };
+  }
+  return { text: "", host: t };
+}
+
+/** Drag-and-drop matching: draggable items plus the boxes they belong in, grouped by the block that holds both. */
+function scanDragDrop(addQuestion) {
+  const drags = [...document.querySelectorAll(DRAG_SEL)].filter(
+    (d) => isVisible(d) && !inSkippedRegion(d) && !d.matches("a[href], img") && !d.closest(`[${Q_ATTR}]`) && clean(d.innerText || d.getAttribute("aria-label") || d.alt || d.title).length > 0,
+  );
+  if (!drags.length) return;
+  const dragSet = new Set(drags);
+  const holds = (el) => drags.filter((d) => el !== d && el.contains(d)).length;
+  let targets = [...document.querySelectorAll(DROP_SEL)].filter(
+    (t) => isVisible(t) && !inSkippedRegion(t) && !dragSet.has(t) && !t.matches(`${CONTROL_SEL}, button, a, [data-toggle], [data-bs-toggle]`) && holds(t) < 2 && t.getBoundingClientRect().width >= 20,
+  );
+  targets = targets.filter((t) => !targets.some((o) => o !== t && t.contains(o)));
+  if (!targets.length) return;
+  // Group each box with the block that also holds the items still waiting to be placed; once everything is placed,
+  // with the block holding an item that sits in another box. (Items already in the box itself never count, or an
+  // answered box would form a group of its own and the page would look like a different question after a Check.)
+  const loose = drags.filter((d) => !targets.some((t) => t.contains(d)));
+  const groups = new Map();
+  for (const t of targets) {
+    const pool = loose.length ? loose : drags.filter((d) => !t.contains(d));
+    let anc = t.parentElement;
+    while (anc && anc !== document.body && !pool.some((d) => anc.contains(d))) anc = anc.parentElement;
+    anc ||= document.body;
+    if (!groups.has(anc)) groups.set(anc, []);
+    groups.get(anc).push(t);
+  }
+  for (const [anc, ts] of groups) {
+    const items = drags.filter((d) => anc.contains(d));
+    if (!items.length) continue;
+    const labels = ts.map((t) => targetLabel(t, items));
+    const q = addQuestion("match", [...items, ...ts], items, (d) => d.innerText || d.getAttribute("aria-label") || d.alt || d.title, anc, labels.map((l) => l.host));
+    q.targets = ts.map((t, k) => {
+      t.setAttribute(T_ATTR, `${q.id}-t${k}`);
+      return { id: `${q.id}-t${k}`, text: labels[k].text || `box ${k + 1}` };
+    });
+  }
+}
+
+/** Scans the page. Returns {title, questions: [{id, type, text, options?: [{id, text}], targets?: [{id, text}]}]}. */
 export function scan() {
   clear();
-  for (const el of document.querySelectorAll(`[${Q_ATTR}], [${O_ATTR}]`)) {
+  for (const el of document.querySelectorAll(`[${Q_ATTR}], [${O_ATTR}], [${T_ATTR}]`)) {
     el.removeAttribute(Q_ATTR);
     el.removeAttribute(O_ATTR);
+    el.removeAttribute(T_ATTR);
   }
   let seq = 0;
   const questions = [];
@@ -165,10 +237,10 @@ export function scan() {
   const allControls = new Set(controls);
   const used = new Set();
 
-  const addQuestion = (type, controlEls, optionEls, optionOf) => {
+  const addQuestion = (type, controlEls, optionEls, optionOf, block, extraExcluded = []) => {
     const options = optionEls.map((el) => ({ el, text: clean(optionOf(el)).slice(0, MAX_OPTION_CHARS) }));
-    const container = commonAncestor(controlEls);
-    const excluded = [...new Set([...controlEls, ...optionEls].flatMap(labelHosts))];
+    const container = block || commonAncestor(controlEls);
+    const excluded = [...new Set([...controlEls, ...optionEls].flatMap(labelHosts).concat(extraExcluded))];
     let { text, container: qEl } = questionFor(container, excluded, allControls, new Set(controlEls));
     if (qEl.hasAttribute(Q_ATTR)) qEl = container.hasAttribute(Q_ATTR) ? controlEls[0] : container;
     const id = `q${++seq}`;
@@ -184,6 +256,8 @@ export function scan() {
     questions.push(question);
     return question;
   };
+
+  scanDragDrop(addQuestion);
 
   // Radios: grouped by name (mutually exclusive by definition). Checkboxes and ARIA widgets: by enclosing group.
   const groups = [];
@@ -315,12 +389,76 @@ function typeInto(el, text) {
 }
 
 const byAttr = (attr, id) => document.querySelector(`[${attr}="${id}"]`);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const centre = (el) => {
+  const r = el.getBoundingClientRect();
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+};
+
+/** True once the item (or a copy of its text) sits inside the target. */
+function landed(src, tgt, text, before) {
+  if (tgt.contains(src)) return true;
+  const now = clean(tgt.innerText);
+  return !!text && now !== before && now.includes(text);
+}
+
+function dragEvent(type, el, at, dt) {
+  el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, composed: true, clientX: at.x, clientY: at.y, dataTransfer: dt }));
+}
+
+function pointerEvent(type, el, at) {
+  const init = { bubbles: true, cancelable: true, composed: true, clientX: at.x, clientY: at.y, screenX: at.x, screenY: at.y, button: 0, buttons: /up|end/.test(type) ? 0 : 1, view: window };
+  el.dispatchEvent(type.startsWith("pointer") ? new PointerEvent(type, { ...init, pointerId: 1, pointerType: "mouse", isPrimary: true }) : new MouseEvent(type, init));
+}
 
 /**
- * Applies answers [{id, option_ids, text}] to the questions tagged by scan().
+ * Moves a draggable into a drop target the way a user would, trying in turn: HTML5 drag events sharing one
+ * DataTransfer (native / React DnD handlers), a pointer + mouse drag (SortableJS, jQuery UI, dnd-kit style
+ * libraries), and click-to-pick then click-to-place. Resolves true when the target visibly accepted the item.
+ */
+async function dragTo(src, tgt) {
+  const text = clean(src.innerText || src.getAttribute("aria-label") || src.alt || src.title);
+  const before = clean(tgt.innerText);
+  src.scrollIntoView?.({ block: "center" });
+  const from = centre(src);
+  const to = centre(tgt);
+  const dt = new DataTransfer();
+  dragEvent("dragstart", src, from, dt);
+  if (!dt.types.length) dt.setData("text/plain", src.id || text);
+  dragEvent("drag", src, from, dt);
+  dragEvent("dragenter", tgt, to, dt);
+  dragEvent("dragover", tgt, to, dt);
+  dragEvent("drop", tgt, to, dt);
+  dragEvent("dragend", src, to, dt);
+  await sleep(80);
+  if (landed(src, tgt, text, before)) return true;
+  const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
+  pointerEvent("pointerdown", src, from);
+  pointerEvent("mousedown", src, from);
+  await sleep(30);
+  for (const at of [{ x: from.x + 6, y: from.y + 6 }, mid, to]) {
+    const over = document.elementFromPoint(at.x, at.y) || tgt;
+    pointerEvent("pointermove", over, at);
+    pointerEvent("mousemove", over, at);
+    await sleep(30);
+  }
+  const over = document.elementFromPoint(to.x, to.y) || tgt;
+  pointerEvent("pointerup", over, to);
+  pointerEvent("mouseup", over, to);
+  await sleep(120);
+  if (landed(src, tgt, text, before)) return true;
+  src.click();
+  await sleep(60);
+  tgt.click();
+  await sleep(120);
+  return landed(src, tgt, text, before);
+}
+
+/**
+ * Applies answers [{id, option_ids, text, pairs?: [{option_id, target_id}]}] to the questions tagged by scan().
  * Returns {filled, shown, missing}: controls changed, answers only displayed beside the question, ids not found.
  */
-export function apply(answers, questions) {
+export async function apply(answers, questions) {
   const byId = new Map((questions || []).map((q) => [q.id, q]));
   const result = { filled: 0, shown: 0, missing: 0 };
   let firstEl = null;
@@ -358,6 +496,25 @@ export function apply(answers, questions) {
         typeInto(el, text);
         done = true;
       }
+    } else if (q.type === "match") {
+      let dropped = 0;
+      const pairs = (a.pairs || []).filter((p) => q.options?.some((o) => o.id === p.option_id) && q.targets?.some((t) => t.id === p.target_id));
+      for (const p of pairs) {
+        const src = byAttr(O_ATTR, p.option_id);
+        const tgt = byAttr(T_ATTR, p.target_id);
+        if (!src || !tgt) continue;
+        const ok = await dragTo(src, tgt);
+        if (ok) {
+          dropped++;
+          tgt.classList.add(PICKED_CLASS);
+        } else badge(tgt, q.options.find((o) => o.id === p.option_id)?.text || "?", true);
+      }
+      done = dropped > 0 && dropped === pairs.length;
+      if (dropped) result.filled++;
+      else if (pairs.length || text) result.shown++;
+      if (!done && pairs.length) badge(qEl, text || pairs.map((p) => `${q.options.find((o) => o.id === p.option_id)?.text} → ${q.targets.find((t) => t.id === p.target_id)?.text}`).join("; "), true);
+      firstEl ??= qEl;
+      continue;
     }
     if (done) result.filled++;
     else if (text) result.shown++;
@@ -378,4 +535,33 @@ export function clear() {
   for (const el of document.querySelectorAll(`.${PICKED_CLASS}`)) el.classList.remove(PICKED_CLASS);
 }
 
-globalThis.__copyForAIFill = { scan, apply, clear };
+function buttonText(el) {
+  return clean(el.matches("input") ? el.value || el.getAttribute("aria-label") || el.title : el.innerText || el.getAttribute("aria-label") || el.title || el.value);
+}
+
+/**
+ * Clicks the page's Next / Continue button, or - when there is none - its Submit / Check / Finish button, so the agent
+ * can move on to the next question or page. Buttons inside an open dialog win (confirmations); a button this agent
+ * already clicked on this page is only clicked again when nothing else qualifies (Check → Next flows). Buttons that go
+ * backwards, cancel, reset or delete are never clicked. Returns the button's text, or null when nothing was clicked.
+ */
+export function advance() {
+  const dialog = [...document.querySelectorAll(DIALOG_SEL)].filter(isVisible).at(-1);
+  const root = dialog || document;
+  const candidates = [...root.querySelectorAll("button, input[type=submit], input[type=button], input[type=image], [role=button], a.btn, a.button, a[class*=next], a[class*=submit]")].filter((el) => {
+    if (!isVisible(el) || el.disabled || el.getAttribute("aria-disabled") === "true" || el.closest(`[aria-hidden=true], .${BADGE_CLASS}`)) return false;
+    if (!dialog && el.closest("nav, header, [role=navigation], [role=banner], [role=search]")) return false;
+    const r = el.getBoundingClientRect();
+    return r.width >= 12 && r.height >= 12;
+  });
+  const labelled = candidates.map((el) => ({ el, text: buttonText(el).slice(0, 80) })).filter((c) => c.text.length && c.text.length <= 60 && !NOT_BTN.test(c.text));
+  const best = (list) => list.filter((c) => NEXT_BTN.test(c.text)).at(-1) || list.filter((c) => SUBMIT_BTN.test(c.text)).at(-1);
+  const pick = best(labelled.filter((c) => !c.el.hasAttribute(CLICKED_ATTR))) || best(labelled);
+  if (!pick) return null;
+  pick.el.setAttribute(CLICKED_ATTR, "1");
+  pick.el.scrollIntoView?.({ block: "center" });
+  pick.el.click();
+  return pick.text;
+}
+
+globalThis.__copyForAIFill = { scan, apply, clear, advance };
