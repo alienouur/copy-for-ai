@@ -23,7 +23,7 @@ async function init() {
   if (requested) chrome.storage.session.remove("openTab");
   showTab(requested || location.hash.slice(1) || "general");
 
-  for (const key of ["answerOnly", "sendScreenshot", "includeHeader", "includeLinks", "includeImages", "wrapInFence"]) {
+  for (const key of ["answerOnly", "sendScreenshot", "autoSubmit", "includeHeader", "includeLinks", "includeImages", "wrapInFence"]) {
     const box = $(key);
     box.checked = settings[key];
     box.addEventListener("change", async () => {

@@ -26,40 +26,96 @@ const quizHtml = `<!doctype html><html><head><title>Maths Quiz 1</title></head><
 <div class="question"><p>2. Which of these numbers are prime? (tick all that apply)</p>
 <ul><li><label><input type="checkbox" name="p2"> 2</label></li><li><label><input type="checkbox" name="p3"> 3</label></li><li><label><input type="checkbox" name="p4" checked> 4</label></li></ul></div>
 <p>3. The capital of France is <select name="q3"><option value="">Choose…</option><option value="rome">Rome</option><option value="paris">Paris</option></select></p>
-<p>4. Solve x + 1 = 3. Then x = <input type="text" name="q4"></p>
-<p>5. Explain briefly why the sky is blue.</p><textarea name="q5" rows="3"></textarea>
+<p>4. Solve x + 1 = 3. Then x = <input type="text" name="q4" onpaste="event.preventDefault()"></p>
+<p>5. Explain briefly why the sky is blue.</p><textarea name="q5" rows="3" onpaste="event.preventDefault()"></textarea>
 <p><label><input type="checkbox" name="agree"> I agree to the terms</label></p>
 <button type="submit">Submit</button>
 </form>
 <script>document.getElementById("quiz").addEventListener("submit", (e) => { e.preventDefault(); window.__submitted = (window.__submitted || 0) + 1; });
-window.__changes = []; document.addEventListener("change", (e) => window.__changes.push(e.target.name));</script>
+window.__changes = []; document.addEventListener("change", (e) => window.__changes.push(e.target.name));
+// Anti-paste field: the page keeps its own model built from single-character keystrokes and reverts anything else
+// (pasted text, programmatic value changes), like typing-only quiz platforms do.
+window.__typed = ""; window.__keys = [];
+const q4 = document.querySelector("input[name=q4]");
+q4.addEventListener("keydown", (e) => window.__keys.push(e.key));
+q4.addEventListener("input", (e) => {
+  if (e.inputType === "insertText" && e.data && e.data.length === 1 && e.target.value === window.__typed + e.data) window.__typed += e.data;
+  else if (e.inputType === "deleteContentBackward") window.__typed = "";
+  else e.target.value = window.__typed;
+});</script>
 </body></html>`;
 // Worksheet without any fields: answers are shown next to each numbered question.
 const worksheetHtml = `<!doctype html><html><head><title>Worksheet</title></head><body><article><h1>Fractions worksheet</h1>
 <p>Answer the following.</p><ol><li>What is 1/2 + 1/4?</li><li>Simplify 6/8.</li><li>Is 3/5 bigger than 1/2?</li></ol></article></body></html>`;
+// Three-step course: real navigation (Next), drag-and-drop matching + Check that reveals Next, an SPA step swap, a form
+// Submit that navigates to a results page. Every click is logged in localStorage so the test can see the exact sequence.
+const courseHead = `<!doctype html><html><head><title>Geography course</title><meta charset="utf-8"><style>.dropzone{display:inline-block;min-width:120px;min-height:32px;border:1px dashed #888;vertical-align:middle}[draggable]{display:inline-block;padding:4px 8px;border:1px solid #333;margin:4px;cursor:grab}</style></head><body>
+<script>window.log = (e) => localStorage.setItem("__log", (localStorage.getItem("__log") || "") + e + ";");</script>
+<nav><a href="/course/1.html">Course home</a><button onclick="log('nav-menu')">Menu</button></nav>`;
+const coursePages = {
+  "/course/1.html": `${courseHead}<h1>Step 1 of 3</h1><form id="f1">
+<fieldset><legend>1. What is 6 × 7?</legend><label><input type="radio" name="q1" value="a"> 40</label><label><input type="radio" name="q1" value="b"> 42</label><label><input type="radio" name="q1" value="c"> 48</label></fieldset>
+<button type="button" onclick="log('back')">Back</button> <button type="button" id="next">Next</button></form>
+<script>document.getElementById("next").onclick = () => { log("next1:" + (document.querySelector("input[name=q1]:checked")?.value || "none")); location.href = "/course/2.html"; };</script></body></html>`,
+  "/course/2.html": `${courseHead}<h1>Step 2 of 3</h1><main id="step">
+<section id="match"><h2>2. Drag each capital onto its country</h2>
+<div class="items"><span draggable="true" id="i-paris">Paris</span><span draggable="true" id="i-rome">Rome</span><span draggable="true" id="i-berlin">Berlin</span></div>
+<table><tr><td>France</td><td><span class="dropzone" data-accept="i-paris"></span></td></tr><tr><td>Italy</td><td><span class="dropzone" data-accept="i-rome"></span></td></tr></table>
+<button type="button" id="check">Check</button> <button type="button" id="next2" hidden>Next</button><p id="feedback"></p></section></main>
+<script>
+for (const d of document.querySelectorAll("[draggable]")) d.addEventListener("dragstart", (e) => { e.dataTransfer.setData("text", d.id); log("dragstart:" + d.id); });
+for (const z of document.querySelectorAll(".dropzone")) {
+  z.addEventListener("dragover", (e) => e.preventDefault());
+  z.addEventListener("drop", (e) => { e.preventDefault(); const el = document.getElementById(e.dataTransfer.getData("text")); if (el) { z.replaceChildren(el); log("drop:" + el.id + ">" + z.dataset.accept); } });
+}
+document.getElementById("check").onclick = () => {
+  const ok = [...document.querySelectorAll(".dropzone")].filter((z) => z.firstElementChild?.id === z.dataset.accept).length;
+  document.getElementById("feedback").textContent = ok + " of 2 correct";
+  log("check:" + ok);
+  document.getElementById("next2").hidden = false;
+};
+document.getElementById("next2").onclick = () => {
+  log("next2");
+  document.getElementById("step").innerHTML = '<form action="/course/done.html" method="get"><p>3. Solve x + 1 = 3. Then x = <input type="text" name="q3"></p><button type="button" onclick="log(&quot;reset&quot;)">Reset</button> <button type="submit">Submit</button></form>';
+  document.querySelector("#step form").addEventListener("submit", () => log("submit:" + document.querySelector("input[name=q3]").value));
+};
+</script></body></html>`,
+  "/course/done.html": `${courseHead}<h1>Results</h1><p>You have completed the course. Score: 3 / 3.</p>
+<button type="button" onclick="log('review')">Review answers</button> <button type="button" onclick="log('again')">Try again</button> <a href="/course/1.html" class="btn" onclick="log('back-course')">Back to course</a></body></html>`,
+};
 const ANSWER_KEY = { "40": false, "42": true, "2": true, "3": true, "4": false, "Paris": true, "Rome": false };
+const MATCH_KEY = { France: "Paris", Italy: "Rome" };
 function fillAnswers(text) {
   const answers = [];
   let current = null;
+  let type = "";
   for (const line of text.split("\n")) {
     const q = line.match(/^Q (\S+) \[(\w+)\]: (.*)$/);
     if (q) {
-      current = { id: q[1], option_ids: [], text: /x \+ 1/.test(q[3]) ? "2" : /sky/.test(q[3]) ? "Rayleigh scattering of sunlight" : `Answer for ${q[1]}` };
+      type = q[2];
+      current = { id: q[1], option_ids: [], pairs: [], options: {}, text: /x \+ 1/.test(q[3]) ? "2" : /sky/.test(q[3]) ? "Rayleigh scattering of sunlight" : `Answer for ${q[1]}` };
       answers.push(current);
       continue;
     }
     const o = line.match(/^- (\S+): (.*)$/);
-    if (o && current && ANSWER_KEY[o[2].trim()]) {
+    if (o && current) current.options[o[2].trim()] = o[1];
+    if (o && current && type !== "match" && ANSWER_KEY[o[2].trim()]) {
       current.option_ids.push(o[1]);
       current.text = o[2].trim();
     }
+    const t = line.match(/^> (\S+): (.*)$/);
+    if (t && current && MATCH_KEY[t[2].trim()] && current.options[MATCH_KEY[t[2].trim()]]) {
+      current.pairs.push({ option_id: current.options[MATCH_KEY[t[2].trim()]], target_id: t[1] });
+      current.text = current.pairs.length === 1 ? `${MATCH_KEY[t[2].trim()]} → ${t[2].trim()}` : `${current.text}; ${MATCH_KEY[t[2].trim()]} → ${t[2].trim()}`;
+    }
   }
-  return answers;
+  return answers.map(({ options, ...a }) => a);
 }
 const mock = createServer((req, res) => {
   if (req.method === "GET") {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-    return res.end(req.url.startsWith("/quiz") ? quizHtml : req.url.startsWith("/worksheet") ? worksheetHtml : lessonHtml);
+    const pathname = req.url.split("?")[0];
+    return res.end(coursePages[pathname] || (pathname.startsWith("/quiz") ? quizHtml : pathname.startsWith("/worksheet") ? worksheetHtml : lessonHtml));
   }
   let raw = "";
   req.on("data", (c) => (raw += c));
@@ -94,6 +150,12 @@ writeFileSync(`${dist}/manifest.json`, JSON.stringify(manifest));
 const bg = readFileSync(`${dist}/background.js`, "utf8");
 if (!bg.includes("https://copyforai-license.onrender.com")) throw new Error("license API url not found in background bundle");
 writeFileSync(`${dist}/background.js`, bg.replaceAll("https://copyforai-license.onrender.com", mockUrl));
+
+// Screenshots are documentation, not assertions: a background tab can stall the capture in headed Chrome.
+async function shot(page, file, fullPage = false) {
+  await page.bringToFront().catch(() => {});
+  await page.screenshot({ path: file, fullPage, timeout: 15000 }).catch((e) => console.warn(`screenshot ${file} skipped: ${e.message.split("\n")[0]}`));
+}
 
 const profile = mkdtempSync(path.join(tmpdir(), "cfa-profile-"));
 const ctx = await chromium.launchPersistentContext(profile, {
@@ -219,7 +281,7 @@ req = solveCalls.at(-1);
 if (req.mode !== "explain" || req.history.length !== 4 || !/step by step/.test(req.question)) throw new Error("explain request wrong");
 if ((await lastAnswer().locator("ol li").count()) !== 2) throw new Error("markdown list not rendered");
 if (!(await popup.locator(".msg.model .explain").last().isHidden())) throw new Error("explain button should hide on explain answers");
-await popup.screenshot({ path: "release/screenshot-sidepanel.png" });
+await shot(popup, "release/screenshot-sidepanel.png");
 
 // Thread survives a panel reload and a page refresh, resets on navigation to another page
 await popup.reload();
@@ -283,7 +345,7 @@ if ((await panel2.locator(".msg.user .bubble").first().textContent()) !== "Solve
 const notes = await sw.evaluate(() => globalThis.__notes);
 console.log("notifications:", notes.map((n) => `${n.id}: ${n.title} – ${n.message}`));
 if (notes.length !== 1 || !/Lesson solved/.test(notes[0].title) || !notes[0].message.includes(`${total} parts`) || notes[0].silent !== false) throw new Error("completion notification wrong");
-await panel2.screenshot({ path: "release/screenshot-agent.png" });
+await shot(panel2, "release/screenshot-agent.png");
 // Notification click re-opens the panel for that tab (sidePanel.open needs a gesture, so it may throw; the fallback must not create a tab).
 await sw.evaluate(async (id) => {
   globalThis.__opened = [];
@@ -331,10 +393,13 @@ await popup.waitForSelector("#job.error", { timeout: 10000 });
 await popup.click("#job-dismiss");
 await popup.click("#new-chat");
 
-// 2f) Quiz page: the agent answers in place - radios / checkboxes / select / text / textarea - on the same tab, no submit.
+// 2f) Quiz page: the agent answers in place - radios / checkboxes / select / text / textarea - on the same tab. With
+// "Auto-submit & next" off it must leave the Submit button alone.
 lessonFailAt = 0;
 lessonCalls.length = 0;
 await sw.evaluate(() => (globalThis.__notes = []));
+if (!(await popup.isChecked("#autoSubmit"))) throw new Error("auto-submit should be on by default");
+await popup.uncheck("#autoSubmit");
 await article.goto(`${mockUrl}/quiz.html`, { waitUntil: "domcontentloaded" });
 await popup.waitForFunction(() => /Maths Quiz/.test(document.getElementById("page-title").textContent));
 await popup.click("#lesson-btn");
@@ -357,6 +422,8 @@ const filledState = await article.evaluate(() => ({
   agree: document.querySelector("input[name=agree]").checked,
   q3: document.querySelector("select[name=q3]").value,
   q4: document.querySelector("input[name=q4]").value,
+  q4typed: window.__typed,
+  q4keys: window.__keys,
   q5: document.querySelector("textarea[name=q5]").value,
   badges: [...document.querySelectorAll(".cfa-answer")].map((b) => b.textContent),
   picked: document.querySelectorAll(".cfa-picked").length,
@@ -367,6 +434,7 @@ const filledState = await article.evaluate(() => ({
 console.log("page state after agent:", filledState);
 if (filledState.q1 !== "b" || !filledState.p2 || !filledState.p3 || filledState.p4 || filledState.agree) throw new Error("choices not filled correctly");
 if (filledState.q3 !== "paris" || filledState.q4 !== "2" || !/Rayleigh/.test(filledState.q5)) throw new Error("select / text fields not filled");
+if (filledState.q4typed !== "2" || filledState.q4keys.join() !== "2") throw new Error("anti-paste field must be typed key by key: " + JSON.stringify([filledState.q4typed, filledState.q4keys]));
 if (filledState.badges.length !== 5 || !filledState.badges.some((b) => b.includes("42")) || filledState.picked < 4) throw new Error("answer badges missing");
 if (filledState.submitted !== 0 || filledState.url !== "/quiz.html") throw new Error("the agent must not submit the form");
 if (!["q1", "p2", "p4", "q3", "q4", "q5"].every((n) => filledState.changes.includes(n))) throw new Error("change events should fire for frameworks: " + filledState.changes);
@@ -377,7 +445,7 @@ const quizMeta = await popup.locator(".msg.model .meta").last().textContent();
 if (!/Agent · 5 questions on the page/.test(quizMeta) || /parts\)/.test(quizMeta)) throw new Error("quiz meta wrong: " + quizMeta);
 const quizNotes = await sw.evaluate(() => globalThis.__notes);
 if (quizNotes.length !== 1 || !/5 answers filled in/.test(quizNotes[0].message) || !/Review it, then submit/.test(quizNotes[0].message)) throw new Error("quiz notification wrong: " + JSON.stringify(quizNotes));
-await article.screenshot({ path: "release/screenshot-quiz-filled.png" });
+await shot(article, "release/screenshot-quiz-filled.png");
 
 // Worksheet without fields: answers appear beside each question.
 lessonCalls.length = 0;
@@ -397,6 +465,62 @@ if (wsBadges.length !== 3 || !wsBadges.every((b) => /Answer for q\d/.test(b))) t
 if (!/3 shown next to the question/.test(await popup.textContent("#job-msg"))) throw new Error("worksheet summary wrong");
 await popup.click("#job-dismiss");
 await popup.click("#new-chat");
+
+// 2g) Multi-step course with auto-submit: fill -> Next (navigation) -> drag-and-drop matching -> Check -> Next (SPA swap)
+// -> text answer -> Submit (navigation to results) -> stop. Same tab throughout; Back / Reset / Review / Try again untouched.
+lessonCalls.length = 0;
+await sw.evaluate(() => (globalThis.__notes = []));
+await popup.check("#autoSubmit");
+if ((await sw.evaluate(async () => (await chrome.storage.sync.get("settings")).settings.autoSubmit)) !== true) throw new Error("auto-submit toggle should persist in settings");
+const tabsBefore = ctx.pages().length;
+await article.goto(`${mockUrl}/course/1.html`, { waitUntil: "domcontentloaded" });
+await article.evaluate(() => localStorage.removeItem("__log"));
+await popup.waitForFunction(() => /Geography course/.test(document.getElementById("page-title").textContent));
+await popup.click("#lesson-btn");
+await popup.waitForFunction(() => /Clicked|waiting for the next page/.test(document.getElementById("job-msg").textContent), null, { timeout: 30000, polling: 50 });
+console.log("course progress:", await popup.textContent("#job-msg"));
+await popup.waitForSelector("#job.done", { timeout: 60000 });
+console.log("course job:", await popup.textContent("#job-count"), "-", await popup.textContent("#job-msg"));
+const courseLog = await article.evaluate(() => localStorage.getItem("__log"));
+console.log("course click log:", courseLog, "- final url:", article.url());
+if (ctx.pages().length !== tabsBefore) throw new Error("the agent must stay on the same tab");
+if (!article.url().endsWith("/course/done.html?q3=2")) throw new Error("course should end on the results page with the typed answer submitted");
+const courseSteps = courseLog.split(";").filter(Boolean).filter((s) => !s.startsWith("dragstart"));
+if (courseSteps.join() !== "next1:b,drop:i-paris>i-paris,drop:i-rome>i-rome,check:2,next2,submit:2") throw new Error("course click sequence wrong: " + courseSteps.join());
+if (lessonCalls.length !== 3 || lessonCalls.some((c) => c.mode !== "fill")) throw new Error(`course should take 3 fill requests, got ${lessonCalls.length}`);
+console.log("match request:\n" + lessonCalls[1].text);
+if (!/^Q \S+ \[match\]: 2\. Drag each capital/m.test(lessonCalls[1].text) || !/^- \S+: Berlin$/m.test(lessonCalls[1].text) || !/^> \S+: France$/m.test(lessonCalls[1].text) || !/^> \S+: Italy$/m.test(lessonCalls[1].text)) throw new Error("match question should list draggable items and drop targets");
+if (!/page 2 of the lesson/.test(lessonCalls[1].question) || !/^Q \S+ \[text\]: 3\. Solve x \+ 1 = 3/m.test(lessonCalls[2].text)) throw new Error("later pages should be scanned after the click");
+if (!/3 answers filled in on the page \(3 pages\)/.test(await popup.textContent("#job-msg")) || !/submitted via “Submit”/.test(await popup.textContent("#job-msg"))) throw new Error("course summary wrong: " + (await popup.textContent("#job-msg")));
+const courseAnswer = await popup.locator(".msg.model .bubble").last().textContent();
+if (!/→ 42/.test(courseAnswer) || !/Paris → France; Rome → Italy/.test(courseAnswer) || !/→ 2/.test(courseAnswer)) throw new Error("course answers not listed in the thread: " + courseAnswer);
+if (!/Agent · 3 questions on the page \(3 pages\)/.test(await popup.locator(".msg.model .meta").last().textContent())) throw new Error("course meta wrong");
+const courseNotes = await sw.evaluate(() => globalThis.__notes);
+if (courseNotes.length !== 1 || !/Check the results/.test(courseNotes[0].message)) throw new Error("course notification wrong: " + JSON.stringify(courseNotes));
+
+// Drag-and-drop on its own page (no Next / Submit anywhere): the items land in their boxes and the job ends on that page.
+lessonCalls.length = 0;
+await popup.click("#job-dismiss");
+await popup.click("#new-chat");
+await article.goto(`${mockUrl}/course/2.html`, { waitUntil: "domcontentloaded" });
+await article.evaluate(() => { localStorage.removeItem("__log"); document.getElementById("check").remove(); });
+await popup.waitForFunction(() => /Geography course/.test(document.getElementById("page-title").textContent));
+await popup.click("#lesson-btn");
+await popup.waitForSelector("#job.done", { timeout: 30000 });
+const dndState = await article.evaluate(() => ({
+  france: document.querySelector("[data-accept=i-paris]").textContent,
+  italy: document.querySelector("[data-accept=i-rome]").textContent,
+  loose: [...document.querySelectorAll(".items [draggable]")].map((d) => d.textContent),
+  picked: document.querySelectorAll(".cfa-picked").length,
+  log: localStorage.getItem("__log"),
+  url: location.pathname,
+}));
+console.log("drag-drop state:", dndState, "-", await popup.textContent("#job-msg"));
+if (dndState.france !== "Paris" || dndState.italy !== "Rome" || dndState.loose.join() !== "Berlin" || dndState.picked !== 2) throw new Error("drag-and-drop answers not placed");
+if (dndState.url !== "/course/2.html" || lessonCalls.length !== 1) throw new Error("without a Next / Submit button the agent should stop on the page");
+await shot(article, "release/screenshot-dragdrop.png");
+await popup.click("#job-dismiss");
+await popup.click("#new-chat");
 await article.goto("https://en.wikipedia.org/wiki/Markdown?e2e=nav2", { waitUntil: "domcontentloaded" });
 await popup.waitForSelector("#empty:not([hidden])", { timeout: 10000 });
 
@@ -409,7 +533,7 @@ console.log("copy status:", await popup.textContent("#copy-status"));
 const clip = await popup.evaluate(() => navigator.clipboard.readText());
 console.log("clipboard starts with:", JSON.stringify(clip.slice(0, 120)));
 if (!clip.startsWith("Summarize the following page") || !clip.includes("# Markdown")) throw new Error("clipboard content wrong");
-await popup.screenshot({ path: "release/screenshot-copytools.png" });
+await shot(popup, "release/screenshot-copytools.png");
 
 // selection with nothing selected -> friendly error
 await popup.click("#copy-selection");
@@ -440,7 +564,7 @@ async function tryKey(key) {
   return cls.includes("ok");
 }
 if (await tryKey("not-a-real-key")) throw new Error("garbage key accepted");
-await options.screenshot({ path: "release/screenshot-options.png", fullPage: true });
+await shot(options, "release/screenshot-options.png", true);
 if (process.env.TEST_LICENSE_KEY) {
   const real = process.env.TEST_LICENSE_KEY.trim();
   const tampered = real.replace(/\.([^.]+)$/, (m, sig) => "." + (sig[0] === "A" ? "B" : "A") + sig.slice(1));

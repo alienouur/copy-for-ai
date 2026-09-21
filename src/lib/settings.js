@@ -41,6 +41,7 @@ export const DEFAULT_SETTINGS = {
   proTrialsUsed: 0,
   answerOnly: true,
   sendScreenshot: true,
+  autoSubmit: true,
 };
 
 export async function getSettings() {

@@ -69,8 +69,11 @@ async function startLesson() {
   hideStatus();
   await ensureAccess(tab);
   const mode = $("answerOnly").checked ? "answer" : "explain";
+  const autoSubmit = $("autoSubmit").checked;
   renderJob({ status: "running", tabId: tab.id, step: 0, total: 0, message: "Starting…" });
-  const res = await chrome.runtime.sendMessage({ type: "cfa-lesson-start", tab: { id: tab.id, windowId: tab.windowId, url: tab.url, title: tab.title }, mode }).catch(() => null);
+  const res = await chrome.runtime
+    .sendMessage({ type: "cfa-lesson-start", tab: { id: tab.id, windowId: tab.windowId, url: tab.url, title: tab.title }, mode, autoSubmit })
+    .catch(() => null);
   if (!res?.ok) renderJob({ status: "error", tabId: tab.id, error: res?.error || "Could not start the agent. Reload the extension and try again." });
 }
 
@@ -453,7 +456,7 @@ async function init() {
   select.value = settings.templateId;
   select.addEventListener("change", () => saveSettings({ templateId: select.value }));
 
-  for (const key of ["includeLinks", "includeImages", "includeHeader", "answerOnly", "sendScreenshot"]) {
+  for (const key of ["includeLinks", "includeImages", "includeHeader", "answerOnly", "sendScreenshot", "autoSubmit"]) {
     const box = $(key);
     box.checked = settings[key];
     box.addEventListener("change", () => saveSettings({ [key]: box.checked }));

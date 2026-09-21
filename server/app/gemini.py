@@ -27,12 +27,17 @@ MODE_EXPLAIN = """For each question write **Answer:** followed by the final answ
 step-by-step explanation (about 3–6 lines) of why it is correct. Number the questions as on the page."""
 
 MODE_FILL = """The PAGE TEXT is a list of questions extracted from a web form. Each question line looks like "Q <id> [<type>]: <question>" \
-and is followed by its options as "- <option id>: <option text>" for types choice / multi / select.
-Answer EVERY question and return JSON only, in this shape: {"answers": [{"id": "<question id>", "option_ids": [...], "text": "..."}]}.
+and is followed by its options as "- <option id>: <option text>" for types choice / multi / select / match, and for type match \
+also by the places the options must be dropped into as "> <target id>: <target text>".
+Answer EVERY question and return JSON only, in this shape: \
+{"answers": [{"id": "<question id>", "option_ids": [...], "text": "...", "pairs": [{"option_id": "...", "target_id": "..."}]}]}.
 - choice / select: put exactly one option id in option_ids. multi: put every correct option id in option_ids.
 - text / open: leave option_ids empty and put the exact answer in "text" (just the number / word / short phrase / code to type; \
 no explanation), in the language of the question.
-- Always fill "text" with a short human-readable answer as well (for choices, the option text).
+- match (drag-and-drop / matching): in "pairs" give one entry per target: the option id of the item that belongs in that target \
+(a sentence gap, a category box, the other half of a pair). Use the ids exactly as given; leave option_ids empty. \
+If there are more options than targets, leave the distractors out.
+- Always fill "text" with a short human-readable answer as well (for choices, the option text; for match, "item → target" pairs).
 If a screenshot is provided, use it to read formulas, figures or images the text lacks."""
 
 FILL_SCHEMA = {
@@ -46,6 +51,14 @@ FILL_SCHEMA = {
                     "id": {"type": "STRING"},
                     "option_ids": {"type": "ARRAY", "items": {"type": "STRING"}},
                     "text": {"type": "STRING"},
+                    "pairs": {
+                        "type": "ARRAY",
+                        "items": {
+                            "type": "OBJECT",
+                            "properties": {"option_id": {"type": "STRING"}, "target_id": {"type": "STRING"}},
+                            "required": ["option_id", "target_id"],
+                        },
+                    },
                 },
                 "required": ["id", "text"],
             },
@@ -182,7 +195,7 @@ class GeminiClient:
         return answer
 
     async def fill(self, text: str, image_b64: str | None, image_mime: str, question: str) -> list[dict]:
-        """Structured answers for form questions: [{"id", "option_ids": [...], "text"}]."""
+        """Structured answers for form questions: [{"id", "option_ids": [...], "text", "pairs": [{option_id, target_id}]}]."""
         raw = await self.solve(text, image_b64, image_mime, question, "fill")
         try:
             data = json.loads(raw)
@@ -196,7 +209,12 @@ class GeminiClient:
             if not isinstance(a, dict) or not isinstance(a.get("id"), str):
                 continue
             option_ids = [o for o in (a.get("option_ids") or []) if isinstance(o, str)]
-            clean.append({"id": a["id"], "option_ids": option_ids, "text": str(a.get("text") or "")})
+            pairs = [
+                {"option_id": p["option_id"], "target_id": p["target_id"]}
+                for p in (a.get("pairs") or [])
+                if isinstance(p, dict) and isinstance(p.get("option_id"), str) and isinstance(p.get("target_id"), str)
+            ]
+            clean.append({"id": a["id"], "option_ids": option_ids, "text": str(a.get("text") or ""), "pairs": pairs})
         return clean
 
     async def solve_stream(
