@@ -67,7 +67,7 @@ class StripeClient:
                 params["starting_after"] = starting_after
             data = await self._get("/checkout/sessions", params)
             items = data.get("data") or []
-            out.extend(s for s in items if s.get("payment_status") in PAID_STATUSES)
+            out.extend(s for s in items if s.get("payment_status") == "paid")
             if not items or not data.get("has_more"):
                 return out
             starting_after = items[-1]["id"]

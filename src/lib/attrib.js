@@ -12,7 +12,7 @@ export async function getDeviceId() {
 
 export function cleanSource(raw) {
   return String(raw || "")
-    .replace(/[^A-Za-z0-9_-]+/g, "-")
+    .replace(/[^A-Za-z0-9-]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, MAX_SOURCE);
 }

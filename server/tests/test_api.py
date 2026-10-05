@@ -330,7 +330,7 @@ async def test_source_is_logged_once_per_device(client, solve_env, monkeypatch, 
 async def test_paid_stats_by_source(client, monkeypatch):
     sessions = {
         "data": [
-            {**PAID, "id": "cs_1", "created": 1, "client_reference_id": "abcdef0123_tiktok-hook3", "subscription": "sub_1"},
+            {**PAID, "id": "cs_1", "created": 1, "client_reference_id": "school_lab_1234_tiktok-hook3", "subscription": "sub_1"},
             {**PAID, "id": "cs_2", "created": 2, "client_reference_id": "web_tiktok-hook3"},
             {**PAID, "id": "cs_3", "created": 3, "client_reference_id": None},
             {**UNPAID, "id": "cs_4", "created": 4, "client_reference_id": "web_reddit"},
@@ -338,10 +338,11 @@ async def test_paid_stats_by_source(client, monkeypatch):
         "has_more": False,
     }
     monkeypatch.setattr(main, "_stripe", make_stripe({"/v1/checkout/sessions": sessions}))
-    assert (await client.get("/v1/stats/paid?token=x")).status_code == 404
+    assert (await client.get("/v1/stats/paid", headers={"X-Admin-Token": "x"})).status_code == 404
     monkeypatch.setattr(main, "ADMIN_TOKEN", "secret")
-    assert (await client.get("/v1/stats/paid?token=wrong")).status_code == 404
-    r = await client.get("/v1/stats/paid?token=secret&days=7")
+    assert (await client.get("/v1/stats/paid", headers={"X-Admin-Token": "wrong"})).status_code == 404
+    assert (await client.get("/v1/stats/paid?token=secret")).status_code == 404
+    r = await client.get("/v1/stats/paid?days=7", headers={"X-Admin-Token": "secret"})
     assert r.status_code == 200
     data = r.json()
     assert data["paid"] == 3

@@ -54,7 +54,7 @@
 - كل رابط تنشره يحمل وسم مصدر، مثل: `https://copyforai.onrender.com/?utm_source=tiktok&utm_campaign=hook3` (الحروف والأرقام و`-`/`_` فقط).
 - الموقع يحفظ المصدر (أول زيارة فقط) ويضيفه إلى رابط المتجر ورابط الدفع (`client_reference_id`)، وصفحة الترحيب تسلّمه للإضافة بعد التثبيت، فتُرسله الإضافة مع كل طلب ومع رابط الترقية.
 - النتيجة: كل عملية دفع في Stripe تحمل `client_reference_id` = `<device>_<source>` أو `web_<source>`؛ وسجلات الخادم على Render تحوي سطراً JSON لكل حدث (`first_contact`, `solve`, `quota_hit`) مع المصدر.
-- التقرير: ضع متغير `ADMIN_TOKEN` (أي نص سري طويل) في Render → copyforai-license → Environment، ثم افتح `https://copyforai-license.onrender.com/v1/stats/paid?token=...&days=30` لترى عدد المدفوعات لكل مصدر (بدون بريد أو بيانات شخصية).
+- التقرير: ضع متغير `ADMIN_TOKEN` (أي نص سري طويل) في Render → copyforai-license → Environment، ثم نفّذ في الطرفية `curl -H "X-Admin-Token: <القيمة>" "https://copyforai-license.onrender.com/v1/stats/paid?days=30"` (المفتاح يُرسل في ترويسة لا في الرابط) لترى عدد المدفوعات لكل مصدر (بدون بريد أو بيانات شخصية).
 
 ## التوقعات
 - المتجر يعرض الإضافات الجديدة عضوياً عند البحث عن "homework solver"، "quiz answers"، "solve questions AI" وما شابه (سوق الطلبة أكبر بكثير من سوق Markdown).

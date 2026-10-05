@@ -6,7 +6,7 @@
   var fresh = [params.get("utm_source") || params.get("ref"), params.get("utm_campaign") || params.get("utm_medium"), params.get("utm_content")]
     .filter(Boolean)
     .join("-")
-    .replace(/[^A-Za-z0-9_-]+/g, "-")
+    .replace(/[^A-Za-z0-9-]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 60);
   var source = "";

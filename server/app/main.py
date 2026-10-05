@@ -7,7 +7,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -47,7 +47,7 @@ _seen_devices: set[str] = set()
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 DEVICE_RE = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
-SOURCE_RE = re.compile(r"^[A-Za-z0-9_-]{1,80}$")
+SOURCE_RE = re.compile(r"^[A-Za-z0-9-]{1,80}$")  # no "_": it separates device from source in client_reference_id
 
 
 def _client_ip(request: Request) -> str:
@@ -210,7 +210,11 @@ async def solve(body: SolveBody, request: Request):
             raise HTTPException(429, "Daily fair-use limit reached. It resets at midnight UTC.")
         _event("quota_hit", body)
         raise HTTPException(402, "You've used today's free answers. Upgrade to Pro for unlimited answers.")
-    _event("solve", body, plan=plan["plan"], mode=body.mode)
+
+    def charge() -> None:
+        for k in plan["keys"]:
+            _consume(k)
+        _event("solve", body, plan=plan["plan"], mode=body.mode)
 
     history = [t.model_dump() for t in body.history if t.role in ("user", "model")]
     meta = {"plan": plan["plan"], "remaining": remaining - 1, "model": GEMINI_MODEL}
@@ -220,8 +224,7 @@ async def solve(body: SolveBody, request: Request):
             answers = await _gemini.fill(text, body.image, body.image_mime, question)
         except GeminiError as e:
             raise HTTPException(e.status, str(e))
-        for k in plan["keys"]:
-            _consume(k)
+        charge()
         return {"answers": answers, **meta}
 
     if not body.stream:
@@ -229,8 +232,7 @@ async def solve(body: SolveBody, request: Request):
             answer = await _gemini.solve(text, body.image, body.image_mime, question, body.mode, history)
         except GeminiError as e:
             raise HTTPException(e.status, str(e))
-        for k in plan["keys"]:
-            _consume(k)
+        charge()
         return {"answer": answer, **meta}
 
     deltas = _gemini.solve_stream(text, body.image, body.image_mime, question, body.mode, history)
@@ -248,8 +250,7 @@ async def solve(body: SolveBody, request: Request):
         except GeminiError as e:
             yield _sse({"error": str(e)})
             return
-        for k in plan["keys"]:
-            _consume(k)
+        charge()
         yield _sse({"done": True, **meta})
 
     return StreamingResponse(
@@ -271,9 +272,9 @@ async def get_public_key():
 
 
 @app.get("/v1/stats/paid")
-async def paid_stats(token: str = "", days: int = 30):
+async def paid_stats(days: int = 30, x_admin_token: str = Header(default="")):
     """Paid checkouts of the last `days`, grouped by acquisition source (from client_reference_id). No emails."""
-    if not ADMIN_TOKEN or not hmac.compare_digest(token, ADMIN_TOKEN):
+    if not ADMIN_TOKEN or not hmac.compare_digest(x_admin_token, ADMIN_TOKEN):
         raise HTTPException(404, "Not Found")
     _ready()
     try:
@@ -283,8 +284,9 @@ async def paid_stats(token: str = "", days: int = 30):
     rows = []
     for s in sessions:
         ref = s.get("client_reference_id") or ""
-        # client_reference_id is "<device>_<source>" from the extension or "web_<source>" from the site.
-        source = ref.split("_", 1)[1] if "_" in ref else "direct"
+        # client_reference_id is "<device>_<source>" from the extension or "web_<source>" from the site;
+        # sources never contain "_", device ids may, so split from the right.
+        source = ref.rsplit("_", 1)[1] if "_" in ref else "direct"
         rows.append({"created": s.get("created"), "source": source, "subscription": bool(s.get("subscription"))})
     return {"days": days, "paid": len(rows), "by_source": Counter(r["source"] for r in rows), "sessions": rows}
 
