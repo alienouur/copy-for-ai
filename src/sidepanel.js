@@ -3,7 +3,8 @@ import { ensureAllTabsPermission } from "./lib/extractor.js";
 import { allTemplates, getSettings, saveSettings } from "./lib/settings.js";
 import { checkProAccess, isPro } from "./lib/license.js";
 import { contextWarning, formatCount } from "./lib/format.js";
-import { PRO_CHECKOUT_URL } from "./lib/config.js";
+import { PRO_CHECKOUT_URL, STORE_REVIEWS_URL } from "./lib/config.js";
+import { checkoutUrl } from "./lib/attrib.js";
 import { fetchPlan, hasPageAccess, requestPageAccess, solveTab } from "./lib/solver.js";
 import { renderMarkdown } from "./lib/markdown.js";
 import { jobKey, loadJob } from "./lib/lesson.js";
@@ -212,7 +213,33 @@ function hideStatus() {
   $("status").hidden = true;
 }
 
-const upgradeLink = (label = "Upgrade to Pro") => `<a href="${PRO_CHECKOUT_URL}" target="_blank">${label}</a>`;
+let proUrl = PRO_CHECKOUT_URL;
+const upgradeLink = (label = "Upgrade to Pro") => `<a href="${proUrl}" target="_blank">${label}</a>`;
+
+const REVIEW_AFTER = 3;
+
+/** Counts successful answers; around the third one asks (once) for a store rating. */
+async function countGoodAnswer() {
+  const { goodAnswers = 0, reviewAsked = false } = await chrome.storage.local.get(["goodAnswers", "reviewAsked"]);
+  await chrome.storage.local.set({ goodAnswers: goodAnswers + 1 });
+  if (!reviewAsked && goodAnswers + 1 >= REVIEW_AFTER) showReviewNudge();
+}
+
+function showReviewNudge() {
+  const el = $("nudge");
+  el.hidden = false;
+  el.innerHTML = `Finding it useful? A quick rating on the Chrome Web Store helps other students find it. <a id="nudge-yes" href="${STORE_REVIEWS_URL}" target="_blank">Rate it ★</a> · <a id="nudge-no" href="#">Not now</a>`;
+  const close = () => {
+    el.hidden = true;
+    chrome.storage.local.set({ reviewAsked: true });
+  };
+  $("nudge-yes").addEventListener("click", close);
+  $("nudge-no").addEventListener("click", (e) => {
+    e.preventDefault();
+    close();
+  });
+  scrollToBottom();
+}
 
 function showQuota(me, pro) {
   const el = $("quota");
@@ -225,7 +252,9 @@ function showQuota(me, pro) {
     return;
   }
   const expired = me.expired ? "Subscription ended. " : "";
-  el.innerHTML = `${expired}${me.remaining} free left today · ${upgradeLink("Go unlimited")}`;
+  if (me.remaining <= 0) el.innerHTML = `${expired}No free answers left today · ${upgradeLink("Go unlimited – $4.99/month")}`;
+  else if (me.remaining === 1) el.innerHTML = `${expired}<strong>Last free answer today</strong> · ${upgradeLink("Go unlimited")}`;
+  else el.innerHTML = `${expired}${me.remaining} free left today · ${upgradeLink("Go unlimited")}`;
 }
 
 async function refreshQuota() {
@@ -307,6 +336,7 @@ async function ask({ question = "", mode, fresh = false } = {}) {
     reply.meta = metaText(result);
     saveThread();
     showQuota(result, result.plan === "pro");
+    countGoodAnswer();
   } catch (err) {
     thread.messages.splice(-2, 2);
     if (!thread.messages.length) thread = null;
@@ -439,6 +469,7 @@ function openOptions(e) {
 async function init() {
   const settings = await getSettings();
   const pro = await isPro();
+  proUrl = await checkoutUrl();
 
   const badge = $("pro-badge");
   if (pro) {
@@ -447,7 +478,7 @@ async function init() {
     badge.href = "#";
     badge.addEventListener("click", openOptions);
   } else {
-    badge.href = PRO_CHECKOUT_URL;
+    badge.href = proUrl;
     badge.target = "_blank";
   }
 

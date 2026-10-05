@@ -1,5 +1,7 @@
 import { copyTabs } from "./lib/copy.js";
 import { LANDING_URL } from "./lib/config.js";
+import { rememberSource } from "./lib/attrib.js";
+import { fetchPlan } from "./lib/solver.js";
 import { cancelLesson, isLessonRunning, jobKey, loadJob, runLesson, threadKey } from "./lib/lesson.js";
 
 const MENU_SOLVE = "cfa-solve";
@@ -18,8 +20,18 @@ chrome.runtime.onInstalled.addListener(({ reason }) => {
     chrome.contextMenus.create({ id: MENU_SELECTION, title: "Copy selection for AI (Markdown)", contexts: ["selection"] });
   });
   if (reason === "install") {
-    chrome.tabs.create({ url: `${LANDING_URL}/welcome.html` }).catch(() => {});
+    chrome.tabs.create({ url: `${LANDING_URL}/welcome.html?ext=${chrome.runtime.id}` }).catch(() => {});
   }
+});
+
+// The welcome page (opened right after install) hands over the utm/ref the landing page captured.
+chrome.runtime.onMessageExternal.addListener((msg, sender, sendResponse) => {
+  if (sender.origin !== new URL(LANDING_URL).origin || msg?.type !== "cfa-source") return false;
+  rememberSource(msg.source).then((source) => {
+    sendResponse({ ok: true, source });
+    fetchPlan().catch(() => {});
+  });
+  return true;
 });
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {

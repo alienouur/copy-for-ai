@@ -3,10 +3,10 @@
 Published: https://chromewebstore.google.com/detail/okakcaelabanhieaaolinonpenojdppj (item ID `okakcaelabanhieaaolinonpenojdppj`)
 
 ## Name (max 75)
-Copy for AI – Solve any question on the page
+Copy for AI – AI Homework Helper: Solve & Explain Any Question
 
 ## Summary (max 132)
-Solves the questions on the open page (text or screenshot) in a side panel, answer only or with steps. Copies pages as Markdown too.
+AI homework helper: solves and explains the questions on any page, quiz, PDF or screenshot in a side panel. 5 free answers a day.
 
 ## Category
 Productivity → Education
