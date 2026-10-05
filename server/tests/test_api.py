@@ -308,3 +308,42 @@ async def test_solve_fill_structured(client, solve_env, monkeypatch):
     r = await client.post("/v1/solve", json={**DEVICE, "text": text, "mode": "fill"})
     assert r.status_code == 422
     assert (await client.post("/v1/me", json=DEVICE)).json()["remaining"] == 1  # malformed answers not charged
+
+
+@pytest.mark.anyio
+async def test_source_is_logged_once_per_device(client, solve_env, monkeypatch, capsys):
+    monkeypatch.setattr(main, "_seen_devices", set())
+    body = {**DEVICE, "source": "tiktok-hook3"}
+    assert (await client.post("/v1/me", json=body)).status_code == 200
+    assert (await client.post("/v1/me", json=body)).status_code == 200
+    events = [json.loads(l) for l in capsys.readouterr().out.splitlines() if l.startswith("{")]
+    assert [e["evt"] for e in events] == ["first_contact"]
+    assert events[0]["source"] == "tiktok-hook3"
+
+    r = await client.post("/v1/solve", json={**DEVICE, "source": "bad source!", "text": "2+2?"})
+    assert r.status_code == 200
+    events = [json.loads(l) for l in capsys.readouterr().out.splitlines() if l.startswith("{")]
+    assert events[-1]["evt"] == "solve" and events[-1]["source"] == "direct"
+
+
+@pytest.mark.anyio
+async def test_paid_stats_by_source(client, monkeypatch):
+    sessions = {
+        "data": [
+            {**PAID, "id": "cs_1", "created": 1, "client_reference_id": "abcdef0123_tiktok-hook3", "subscription": "sub_1"},
+            {**PAID, "id": "cs_2", "created": 2, "client_reference_id": "web_tiktok-hook3"},
+            {**PAID, "id": "cs_3", "created": 3, "client_reference_id": None},
+            {**UNPAID, "id": "cs_4", "created": 4, "client_reference_id": "web_reddit"},
+        ],
+        "has_more": False,
+    }
+    monkeypatch.setattr(main, "_stripe", make_stripe({"/v1/checkout/sessions": sessions}))
+    assert (await client.get("/v1/stats/paid?token=x")).status_code == 404
+    monkeypatch.setattr(main, "ADMIN_TOKEN", "secret")
+    assert (await client.get("/v1/stats/paid?token=wrong")).status_code == 404
+    r = await client.get("/v1/stats/paid?token=secret&days=7")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["paid"] == 3
+    assert data["by_source"] == {"tiktok-hook3": 2, "direct": 1}
+    assert "email" not in json.dumps(data).lower()

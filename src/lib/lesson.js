@@ -5,8 +5,7 @@
 // recognisable questions fall back to text chunks / one screenshot per screen solved into the panel. Everything runs
 // in the background worker with progress in chrome.storage.session so the side panel can show it and pick up the
 // result even if it was closed.
-import { api, captureTab, getDeviceId, hasPageAccess, readTab } from "./solver.js";
-import { getLicense } from "./license.js";
+import { api, authBody, captureTab, hasPageAccess, readTab } from "./solver.js";
 import { getSettings } from "./settings.js";
 
 export const LESSON_PROMPT = "Solve the whole lesson on this page.";
@@ -301,9 +300,7 @@ export async function runLesson(tab, { mode, autoSubmit }) {
     const settings = await getSettings();
     const { sendScreenshot } = settings;
     autoSubmit ??= settings.autoSubmit;
-    const license = await getLicense();
-    const deviceId = await getDeviceId();
-    const auth = { device_id: deviceId, license_key: license?.key || null };
+    const auth = await authBody();
 
     await save({ message: "Looking for questions on the page…" });
     let scanned = await scanQuestions(tab.id).catch(() => null);

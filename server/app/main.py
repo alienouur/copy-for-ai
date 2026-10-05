@@ -1,8 +1,9 @@
+import hmac
 import json
 import os
 import re
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -28,6 +29,8 @@ FREE_DAILY_LIMIT = int(os.environ.get("FREE_DAILY_LIMIT", "5"))
 FREE_IP_DAILY_LIMIT = int(os.environ.get("FREE_IP_DAILY_LIMIT", "150"))
 PRO_DAILY_LIMIT = int(os.environ.get("PRO_DAILY_LIMIT", "300"))
 PLAN_CACHE_SECONDS = int(os.environ.get("PLAN_CACHE_SECONDS", str(6 * 3600)))
+# Unlocks GET /v1/stats/paid (per-channel paid conversions); the endpoint is a 404 when unset.
+ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
 MAX_TEXT_CHARS = 40_000
 MAX_IMAGE_B64_CHARS = 3_000_000  # ~2.2 MB of JPEG
 
@@ -40,9 +43,11 @@ _gemini = GeminiClient(GEMINI_KEY, GEMINI_MODEL) if GEMINI_KEY else None
 _hits: dict[str, list[float]] = defaultdict(list)
 _daily: dict[str, tuple[str, int]] = {}  # quota key -> (utc day, count)
 _plan_cache: dict[str, tuple[float, bool]] = {}  # email -> (expires, is_pro)
+_seen_devices: set[str] = set()
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 DEVICE_RE = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
+SOURCE_RE = re.compile(r"^[A-Za-z0-9_-]{1,80}$")
 
 
 def _client_ip(request: Request) -> str:
@@ -73,6 +78,15 @@ def _used_today(key: str) -> int:
 
 def _consume(key: str) -> None:
     _daily[key] = (_today(), _used_today(key) + 1)
+
+
+def _source(body: "MeBody") -> str:
+    return body.source if body.source and SOURCE_RE.match(body.source) else ""
+
+
+def _event(kind: str, body: "MeBody", **extra) -> None:
+    """One JSON line per funnel event (first contact, solve, quota hit) for the weekly channel report."""
+    print(json.dumps({"evt": kind, "device": body.device_id, "source": _source(body) or "direct", **extra}), flush=True)
 
 
 def _ready() -> None:
@@ -117,6 +131,7 @@ class EmailBody(BaseModel):
 class MeBody(BaseModel):
     license_key: str | None = None
     device_id: str
+    source: str | None = Field(default=None, max_length=80)  # utm/ref the install came from
 
 
 class Turn(BaseModel):
@@ -164,6 +179,9 @@ async def healthz():
 @app.post("/v1/me")
 async def me(body: MeBody, request: Request):
     plan = await _resolve_plan(body, request)
+    if body.device_id not in _seen_devices:
+        _seen_devices.add(body.device_id)
+        _event("first_contact", body, plan=plan["plan"])
     return {
         "plan": plan["plan"],
         "remaining": max(0, plan["limit"] - plan["used"]),
@@ -190,7 +208,9 @@ async def solve(body: SolveBody, request: Request):
     if remaining <= 0:
         if plan["plan"] == "pro":
             raise HTTPException(429, "Daily fair-use limit reached. It resets at midnight UTC.")
+        _event("quota_hit", body)
         raise HTTPException(402, "You've used today's free answers. Upgrade to Pro for unlimited answers.")
+    _event("solve", body, plan=plan["plan"], mode=body.mode)
 
     history = [t.model_dump() for t in body.history if t.role in ("user", "model")]
     meta = {"plan": plan["plan"], "remaining": remaining - 1, "model": GEMINI_MODEL}
@@ -248,6 +268,25 @@ async def get_public_key():
     if not _signing_key:
         raise HTTPException(503, "Not configured")
     return public_jwk(_signing_key)
+
+
+@app.get("/v1/stats/paid")
+async def paid_stats(token: str = "", days: int = 30):
+    """Paid checkouts of the last `days`, grouped by acquisition source (from client_reference_id). No emails."""
+    if not ADMIN_TOKEN or not hmac.compare_digest(token, ADMIN_TOKEN):
+        raise HTTPException(404, "Not Found")
+    _ready()
+    try:
+        sessions = await _stripe.paid_sessions_since(time.time() - max(1, min(days, 365)) * 86400)
+    except StripeError as e:
+        raise HTTPException(502, f"Payment provider error: {e}")
+    rows = []
+    for s in sessions:
+        ref = s.get("client_reference_id") or ""
+        # client_reference_id is "<device>_<source>" from the extension or "web_<source>" from the site.
+        source = ref.split("_", 1)[1] if "_" in ref else "direct"
+        rows.append({"created": s.get("created"), "source": source, "subscription": bool(s.get("subscription"))})
+    return {"days": days, "paid": len(rows), "by_source": Counter(r["source"] for r in rows), "sessions": rows}
 
 
 @app.post("/v1/license/from-session")

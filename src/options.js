@@ -3,6 +3,9 @@ import { activate, deactivate, getLicense, isPro, recover } from "./lib/license.
 import { clearHistory, getHistory, removeHistory } from "./lib/history.js";
 import { formatCount } from "./lib/format.js";
 import { PRO_CHECKOUT_URL } from "./lib/config.js";
+import { checkoutUrl } from "./lib/attrib.js";
+
+let proUrl = PRO_CHECKOUT_URL;
 
 const $ = (id) => document.getElementById(id);
 let settings;
@@ -40,7 +43,8 @@ async function init() {
     chrome.tabs.create({ url: "chrome://extensions/shortcuts" });
   });
 
-  for (const id of ["license-buy", "history-upgrade"]) $(id).href = PRO_CHECKOUT_URL;
+  proUrl = await checkoutUrl();
+  for (const id of ["license-buy", "history-upgrade"]) $(id).href = proUrl;
 
   renderPlan();
   renderTemplates();
@@ -121,7 +125,7 @@ function resetEditor() {
 
 async function saveTemplate() {
   if (!pro) {
-    setMsg("tpl-msg", `Custom templates are a Pro feature. <a href="${PRO_CHECKOUT_URL}" target="_blank">Upgrade</a>`, "err");
+    setMsg("tpl-msg", `Custom templates are a Pro feature. <a href="${proUrl}" target="_blank">Upgrade</a>`, "err");
     return;
   }
   const name = $("tpl-name").value.trim();

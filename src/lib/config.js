@@ -13,6 +13,8 @@ export const LICENSE_PUBLIC_KEY_JWK = {
 };
 
 export const LANDING_URL = "https://copyforai.onrender.com";
+export const STORE_URL = "https://chromewebstore.google.com/detail/okakcaelabanhieaaolinonpenojdppj";
+export const STORE_REVIEWS_URL = `${STORE_URL}/reviews`;
 export const SUPPORT_EMAIL = "alienouur@gmail.com";
 
 export const FREE_PRO_TRIALS = 5;

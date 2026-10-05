@@ -1,19 +1,14 @@
 import { LICENSE_API_URL } from "./config.js";
 import { extractFromTab, isSupportedUrl } from "./extractor.js";
 import { getLicense } from "./license.js";
+import { getDeviceId, getSource } from "./attrib.js";
+
+export { getDeviceId };
 
 const MAX_TEXT_CHARS = 40_000;
 const MIN_USEFUL_TEXT = 80;
 const SHOT_MAX_SIDE = 1568;
 const SHOT_QUALITY = 0.82;
-
-export async function getDeviceId() {
-  const { deviceId } = await chrome.storage.local.get("deviceId");
-  if (deviceId) return deviceId;
-  const id = crypto.randomUUID().replace(/-/g, "");
-  await chrome.storage.local.set({ deviceId: id });
-  return id;
-}
 
 /** Captures the visible tab as a downscaled JPEG. Returns base64 without the data: prefix, or null. */
 export async function captureTab(tab) {
@@ -167,6 +162,12 @@ export async function apiStream(path, body, { onDelta, ...options } = {}) {
  * history: earlier [{role, text}] turns when this is a follow-up question about the same page.
  * onDelta(delta, answerSoFar) streams the answer as it is generated.
  */
+/** Identity fields every API call carries: device, license and acquisition source. */
+export async function authBody() {
+  const license = await getLicense();
+  return { device_id: await getDeviceId(), license_key: license?.key || null, source: (await getSource()) || null };
+}
+
 export async function solveTab({ tab, mode, question = "", screenshot = true, history = [], onProgress, onDelta }) {
   onProgress?.("Reading page…");
   const page = await readTab(tab);
@@ -184,11 +185,9 @@ export async function solveTab({ tab, mode, question = "", screenshot = true, hi
     }
   }
 
-  const license = await getLicense();
   onProgress?.("Solving…");
   const data = await apiStream("/v1/solve", {
-    device_id: await getDeviceId(),
-    license_key: license?.key || null,
+    ...(await authBody()),
     text: page?.text || "",
     image,
     image_mime: "image/jpeg",
@@ -201,6 +200,5 @@ export async function solveTab({ tab, mode, question = "", screenshot = true, hi
 }
 
 export async function fetchPlan() {
-  const license = await getLicense();
-  return api("/v1/me", { device_id: await getDeviceId(), license_key: license?.key || null }, { attempts: 1 });
+  return api("/v1/me", await authBody(), { attempts: 1 });
 }

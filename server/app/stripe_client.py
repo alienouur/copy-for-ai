@@ -57,6 +57,21 @@ class StripeClient:
         )
         return data.get("data") or []
 
+    async def paid_sessions_since(self, since: float) -> list[dict]:
+        """All paid checkout sessions created after `since` (unix seconds), newest first."""
+        out: list[dict] = []
+        starting_after = None
+        while True:
+            params: dict = {"created[gte]": int(since), "limit": 100}
+            if starting_after:
+                params["starting_after"] = starting_after
+            data = await self._get("/checkout/sessions", params)
+            items = data.get("data") or []
+            out.extend(s for s in items if s.get("payment_status") in PAID_STATUSES)
+            if not items or not data.get("has_more"):
+                return out
+            starting_after = items[-1]["id"]
+
     async def purchase_from_email(self, email: str) -> Purchase | None:
         for session in await self._sessions_for_email(email):
             p = self._purchase_from_session(session)
